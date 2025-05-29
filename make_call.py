@@ -24,7 +24,7 @@ DB_CONFIG = {
 }
 
 # Target phone number for all calls
-TARGET_PHONE = "+918487857756"
+TARGET_PHONE = "+918128397292"
 
 def fetch_person_details():
     """Fetch first 10 records from person_details table"""
