@@ -87,29 +87,16 @@ try:
     conn = psycopg2.connect(**db_params)
     cur = conn.cursor()
 
-    # Option 1: Get specific records by ID (from your screenshot)
-    print("🔍 Trying to fetch records by ID (1, 2)...")
+    # Get first 5 records ordered by ID
+    print("🔍 Fetching first 5 records...")
     cur.execute("""
         SELECT full_name, job_title, directdials, id
         FROM job_nurse_match
-        WHERE id IN (1, 2) AND full_name IS NOT NULL AND job_title IS NOT NULL
+        WHERE full_name IS NOT NULL AND job_title IS NOT NULL
+        ORDER BY id
+        LIMIT 5
     """)
-    records_by_id = cur.fetchall()
-
-    if records_by_id:
-        print("✅ Found records by ID")
-        records = records_by_id
-    else:
-        print("❌ No records found by ID, trying alternative query...")
-        # Option 2: Get first 2 records ordered by ID
-        cur.execute("""
-            SELECT full_name, job_title, directdials, id
-            FROM job_nurse_match
-            WHERE full_name IS NOT NULL AND job_title IS NOT NULL
-            ORDER BY id
-            LIMIT 2
-        """)
-        records = cur.fetchall()
+    records = cur.fetchall()
 
     cur.close()
     conn.close()
@@ -137,7 +124,7 @@ try:
         print("❌ No valid records found to call.")
         exit()
 
-    print(f"\n🎯 Ready to make {len(call_list)} calls")
+    print(f"\n🎯 Ready to make {len(call_list)} calls (out of 5 records fetched)")
     input("Press ENTER to start the calls...")
 
     # Launch calls in separate threads
