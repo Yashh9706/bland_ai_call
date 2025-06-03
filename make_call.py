@@ -20,6 +20,56 @@ API_KEY = 'org_0301c6c09e6f2613b52b17fb221b1b211abaa4e88525251a05982c0ccc8c494fa
 PATHWAY_ID = "0608afc1-5c2b-4ee7-8c9f-83a67fd0ff3b"
 
 
+def analyze_call_interest(call_id, full_name):
+    """Analyzes the call to determine if the caller showed interest in the job"""
+    print(f"🔍 Analyzing call interest for {full_name}...")
+    
+    try:
+        # Make the POST request to analyze the call
+        response = requests.post(
+            f"https://api.bland.ai/v1/calls/{call_id}/analyze",
+            headers={
+                "authorization": API_KEY,
+                "Content-Type": "application/json"
+            },
+            json={
+                "goal": "Determine if the caller is interested in taking a job",
+                "questions": [
+                    ["Is the caller interested in taking a job (e.g., said 'interested,' 'apply,' asked about job details, or expressed intent to work)?", "boolean"]
+                ]
+            },
+            timeout=30
+        )
+
+        # Try to parse and use the response
+        if response.status_code == 200:
+            response_json = response.json()
+            print(f"📊 Analysis Response for {full_name}: {response_json}")
+
+            if "answers" in response_json:
+                is_interested = response_json["answers"][0]
+                call_intent = "positive" if is_interested else "negative"
+                
+                print(f"🎯 Call Intent for {full_name}: {call_intent}")
+                print(f"{'✅ INTERESTED' if is_interested else '❌ NOT INTERESTED'} - {full_name}")
+                
+                return call_intent, is_interested
+            else:
+                print(f"⚠️ Error: 'answers' not found in the API response for {full_name}")
+                if "error" in response_json:
+                    print(f"API Error: {response_json['error']}")
+                if "message" in response_json:
+                    print(f"Message: {response_json['message']}")
+                return "unknown", None
+        else:
+            print(f"❌ Analysis API error for {full_name}: {response.status_code} - {response.text}")
+            return "error", None
+
+    except Exception as e:
+        print(f"❌ Failed to analyze call for {full_name}: {e}")
+        return "error", None
+
+
 def debug_database_contents():
     """Debug function to check what's in the database"""
     try:
@@ -163,7 +213,36 @@ def extract_valid_phone(directdials):
     return None
 
 
+def validate_phone_number(phone):
+    """Validates and formats phone number"""
+    if not phone:
+        return None
+    
+    # Remove all non-digit and non-plus characters
+    clean = re.sub(r'[^\d+]', '', phone.strip())
+    
+    if not clean:
+        return None
+    
+    # Format the phone number
+    if not clean.startswith('+') and len(clean) == 10:
+        clean = '+1' + clean
+    elif not clean.startswith('+') and len(clean) == 11 and clean.startswith('1'):
+        clean = '+' + clean
+    elif clean.startswith('+') and 8 <= len(clean) <= 15:
+        pass
+    elif not clean.startswith('+') and 8 <= len(clean) <= 15:
+        clean = '+' + clean
+    else:
+        return None
+    
+    if 8 <= len(clean) <= 15 and clean.startswith('+'):
+        return clean
+    return None
+
+
 def fetch_call_details(call_id, full_name):
+    """Fetches call details and analyzes the call for interest"""
     print(f"⏳ Waiting for {full_name}'s call to complete...")
 
     while True:
@@ -195,31 +274,49 @@ def fetch_call_details(call_id, full_name):
                     print(f"⏱️ Duration: {result.get('corrected_duration')} seconds")
                     print(f"📅 Started At: {result.get('started_at')}")
                     print(f"📝 Summary: {result.get('summary')}")
-                    return
+                    
+                    # NEW: Analyze the call for interest
+                    print(f"\n🔍 Analyzing call interest for {full_name}...")
+                    call_intent, is_interested = analyze_call_interest(call_id, full_name)
+                    
+                    # Store results for summary
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': status,
+                        'duration': result.get('corrected_duration'),
+                        'call_intent': call_intent,
+                        'is_interested': is_interested,
+                        'summary': result.get('summary')
+                    }
 
                 else:
                     print(f"🔄 Waiting... Call status: {status}")
             else:
                 print(f"❌ Error fetching details: {response.status_code} - {response.text}")
-                return
+                return None
 
         except Exception as e:
             print(f"❌ Exception fetching call data: {str(e)}")
-            return
+            return None
 
         time.sleep(5)  # Check every 5 seconds
 
 
-def make_call(full_name, job_title, phone_number):
+def make_call(full_name, job_title, phone_number, results_list=None):
+    """Makes a call and returns call analysis results"""
     print(f"📞 Initiating call for {full_name} ({phone_number}) - {job_title}")
     data = {
         "phone_number": phone_number,
         "pathway_id": PATHWAY_ID,
         "request_data": {
             "full_name": full_name,
-            "job_title": job_title
+            "job_title": job_title,
+            "user_name": full_name  # Add this to replace {{user_name}} placeholder
         }
     }
+    
+    print(f"📤 Sending data to API: {json.dumps(data, indent=2)}")
 
     try:
         response = requests.post(
@@ -239,14 +336,70 @@ def make_call(full_name, job_title, phone_number):
             call_id = result.get("call_id")
             if call_id:
                 print(f"✅ Call started for {full_name} - Call ID: {call_id}")
-                fetch_call_details(call_id, full_name)
+                call_result = fetch_call_details(call_id, full_name)
+                
+                # Add to results list if provided (for threading)
+                if results_list is not None and call_result:
+                    results_list.append(call_result)
+                
+                return call_result
             else:
                 print(f"⚠️ Call started but no Call ID returned for {full_name}")
+                return None
         else:
             print(f"❌ Error calling {full_name}: {response.status_code} - {response.text}")
+            return None
 
     except Exception as e:
         print(f"❌ Exception calling {full_name}: {str(e)}")
+        return None
+
+
+def print_call_summary(call_results):
+    """Prints a summary of all call results"""
+    if not call_results:
+        print("\n❌ No call results to summarize.")
+        return
+    
+    print("\n" + "="*80)
+    print("📊 CALL SUMMARY REPORT")
+    print("="*80)
+    
+    interested_count = 0
+    not_interested_count = 0
+    unknown_count = 0
+    
+    for result in call_results:
+        name = result.get('name', 'Unknown')
+        call_intent = result.get('call_intent', 'unknown')
+        is_interested = result.get('is_interested')
+        duration = result.get('duration', 'Unknown')
+        
+        # Count results
+        if call_intent == 'positive':
+            interested_count += 1
+            status_emoji = "✅"
+        elif call_intent == 'negative':
+            not_interested_count += 1
+            status_emoji = "❌"
+        else:
+            unknown_count += 1
+            status_emoji = "❓"
+        
+        print(f"{status_emoji} {name}: {call_intent.upper()} ({duration}s)")
+    
+    print("\n" + "-"*40)
+    print("📈 SUMMARY STATISTICS:")
+    print(f"✅ Interested: {interested_count}")
+    print(f"❌ Not Interested: {not_interested_count}")
+    print(f"❓ Unknown/Error: {unknown_count}")
+    print(f"📞 Total Calls: {len(call_results)}")
+    
+    if len(call_results) > 0:
+        success_rate = (interested_count / len(call_results)) * 100
+        print(f"📊 Interest Rate: {success_rate:.1f}%")
+    
+    print("="*80)
 
 
 # Main execution
@@ -326,18 +479,93 @@ try:
         exit()
 
     print(f"\n🎯 Ready to make {len(call_list)} calls")
+    
+    # NEW: Add testing phone number option
+    print("\n" + "="*60)
+    print("🧪 TESTING MODE OPTION")
+    print("="*60)
+    print("For testing purposes, you can replace all phone numbers with your test number.")
+    print("This prevents unnecessary calls to real users during development/testing.")
+    print()
+    
+    user_input = input("Enter your test phone number (or press ENTER to use original numbers): ").strip()
+    
+    test_phone = None
+    if user_input:
+        # User entered something, try to validate it as a phone number
+        test_phone = validate_phone_number(user_input)
+        
+        if test_phone:
+            print(f"✅ Test phone number validated: {test_phone}")
+        else:
+            print("❌ Invalid phone number format. Please try again.")
+            print("   Examples: +1234567890, 1234567890, +918487857756")
+            
+            # Give another chance to enter correct number
+            while True:
+                retry_input = input("\n📱 Enter your test phone number (or press ENTER to skip): ").strip()
+                if not retry_input:
+                    print("⏭️ Skipping test mode - using original numbers")
+                    break
+                    
+                test_phone = validate_phone_number(retry_input)
+                if test_phone:
+                    print(f"✅ Test phone number validated: {test_phone}")
+                    break
+                else:
+                    print("❌ Invalid format. Try again or press ENTER to skip.")
+    else:
+        print("⏭️ Using original phone numbers from database")
+    
+    # Update call list with test number if provided
+    if test_phone:
+        print(f"\n🧪 TEST MODE: Making only ONE call to your test number: {test_phone}")
+        # Use the first person's details but with test phone number
+        first_person = call_list[0]
+        call_list = [(first_person[0], first_person[1], test_phone)]
+        print(f"✅ Test call will be made using: {first_person[0]}'s details")
+    
+    print(f"\n📞 Final call list:")
+    for i, (name, job, phone) in enumerate(call_list, 1):
+        print(f"  {i}. {name} ({job}) -> {phone}")
+    
+    if test_phone:
+        print(f"\n🧪 TEST MODE: Only 1 call will be made to your test number")
+    else:
+        print(f"\n🔄 LIVE MODE: {len(call_list)} calls will be made to actual users")
+    
+    print("\n" + "="*60)
     input("Press ENTER to start the calls...")
 
-    threads = []
-    for full_name, job_title, phone_number in call_list:
-        thread = threading.Thread(target=make_call, args=(full_name, job_title, phone_number))
-        thread.start()
-        threads.append(thread)
+    # NEW: Store call results for summary
+    call_results = []
 
-    for thread in threads:
-        thread.join()
+    if test_phone:
+        # For test mode, make only one call (no threading needed)
+        print("🧪 Making test call...")
+        full_name, job_title, phone_number = call_list[0]
+        result = make_call(full_name, job_title, phone_number)
+        if result:
+            call_results.append(result)
+    else:
+        # For live mode, make all calls with threading
+        threads = []
+        # Use a thread-safe list for collecting results
+        import threading
+        results_lock = threading.Lock()
+        
+        for full_name, job_title, phone_number in call_list:
+            thread = threading.Thread(target=make_call, args=(full_name, job_title, phone_number, call_results))
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
 
     print("\n✅ All calls completed!")
+    
+    # NEW: Print summary of all calls
+    print_call_summary(call_results)
 
 except psycopg2.Error as e:
     print(f"❌ Database error: {e}")
