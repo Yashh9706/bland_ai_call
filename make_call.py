@@ -334,12 +334,12 @@ if __name__ == "__main__":
             exit()
 
         # Show only essential information
-        print(f"📞 Ready to make {len(call_list)} calls:\n")
+        print(f"📞 Making {len(call_list)} calls:\n")
         for i, (name, job_details, phone) in enumerate(call_list, 1):
             job_title = job_details.get('job_title', 'Unknown')
             print(f"  {i}. {name} | {job_title} | {phone}")
         
-        input("\nPress ENTER to start calls...")
+        print("\n🚀 Starting calls now...\n")
 
         # Store call results for summary
         call_results = []
