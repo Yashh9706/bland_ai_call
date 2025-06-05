@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # PostgreSQL connection parameters - FROM ENV
 db_params = {
@@ -23,6 +23,7 @@ db_params = {
 # Bland API config - FROM ENV
 API_KEY = os.getenv("BLAND_API_KEY")
 PATHWAY_ID = os.getenv("BLAND_PATHWAY_ID")
+print(PATHWAY_ID)
 
 # Table name - FROM ENV (with fallback)
 TABLE_NAME = os.getenv("TABLE_NAME", "person_details_dummy")
@@ -201,6 +202,15 @@ def make_call(full_name, job_details, phone_number, results_list=None):
     location = job_details.get('location', 'Unknown Location')
     pay = job_details.get('pay', 'Competitive Pay')
     
+    # Print detailed call initiation info
+    print(f"📞 Initiating call for {full_name}:")
+    print(f"   📋 Job Title: {job_title}")
+    print(f"   📍 Location: {location}")
+    print(f"   💰 Pay: {pay}")
+    print(f"   📱 Phone: {phone_number}")
+    print(f"   👤 User Name: {full_name}")
+    print("-" * 50)
+    
     data = {
         "phone_number": phone_number,
         "pathway_id": PATHWAY_ID,
@@ -229,6 +239,7 @@ def make_call(full_name, job_details, phone_number, results_list=None):
         if response.status_code == 200:
             call_id = result.get("call_id")
             if call_id:
+                print(f"✅ Call initiated successfully for {full_name} (Call ID: {call_id})")
                 call_result = fetch_call_details(call_id, full_name)
                 
                 if results_list is not None and call_result:
@@ -236,11 +247,14 @@ def make_call(full_name, job_details, phone_number, results_list=None):
                 
                 return call_result
             else:
+                print(f"❌ Failed to get call ID for {full_name}")
                 return None
         else:
+            print(f"❌ Call failed for {full_name}. Status: {response.status_code}")
             return None
 
     except Exception as e:
+        print(f"❌ Error making call for {full_name}: {str(e)}")
         return None
 
 def print_call_summary(call_results):
@@ -249,9 +263,9 @@ def print_call_summary(call_results):
         print("\n❌ No call results to summarize.")
         return
     
-    print("\n" + "="*50)
-    print("📊 CALL SUMMARY")
-    print("="*50)
+    print("\n" + "="*60)
+    print("📊 DETAILED CALL SUMMARY")
+    print("="*60)
     
     interested_count = 0
     not_interested_count = 0
@@ -261,6 +275,7 @@ def print_call_summary(call_results):
         name = result.get('name', 'Unknown')
         call_intent = result.get('call_intent', 'unknown')
         duration = result.get('duration', 'Unknown')
+        call_id = result.get('call_id', 'Unknown')
         
         if call_intent == 'positive':
             interested_count += 1
@@ -272,9 +287,16 @@ def print_call_summary(call_results):
             unknown_count += 1
             status_emoji = "❓"
         
-        print(f"{status_emoji} {name}: {call_intent.upper()} ({duration}s)")
+        print(f"{status_emoji} {name}")
+        print(f"   📞 Call ID: {call_id}")
+        print(f"   🎯 Intent: {call_intent.upper()}")
+        print(f"   ⏱️  Duration: {duration}s")
+        if result.get('summary'):
+            print(f"   📝 Summary: {result.get('summary')[:100]}...")
+        print("-" * 40)
     
-    print(f"\n✅ Interested: {interested_count}")
+    print(f"\n📊 STATISTICS:")
+    print(f"✅ Interested: {interested_count}")
     print(f"❌ Not Interested: {not_interested_count}")
     print(f"❓ Unknown/Error: {unknown_count}")
     print(f"📞 Total Calls: {len(call_results)}")
@@ -283,7 +305,28 @@ def print_call_summary(call_results):
         success_rate = (interested_count / len(call_results)) * 100
         print(f"📊 Interest Rate: {success_rate:.1f}%")
     
-    print("="*50)
+    print("="*60)
+
+def display_call_preview(call_list):
+    """Display detailed preview of all calls to be made"""
+    print(f"📞 CALL PREVIEW - {len(call_list)} calls to be made:")
+    print("="*80)
+    
+    for i, (name, job_details, phone) in enumerate(call_list, 1):
+        job_title = job_details.get('job_title', 'Unknown Position')
+        location = job_details.get('location', 'Unknown Location')  
+        pay = job_details.get('pay', 'Competitive Pay')
+        
+        print(f"CALL #{i}")
+        print(f"👤 Full Name: {name}")
+        print(f"📋 Job Title: {job_title}")
+        print(f"📍 Location: {location}")
+        print(f"💰 Pay: {pay}")
+        print(f"📱 Phone: {phone}")
+        print(f"👤 User Name: {name}")
+        print("-" * 80)
+    
+    print(f"\n🚀 Starting {len(call_list)} calls now...\n")
 
 # Main execution
 if __name__ == "__main__":
@@ -295,14 +338,16 @@ if __name__ == "__main__":
         cur = conn.cursor()
         
         cur.execute(f"""
-            SELECT full_name, url, sms_received_no, id
+            SELECT full_name, url, directdials, id
             FROM {TABLE_NAME}
             WHERE full_name IS NOT NULL 
             AND url IS NOT NULL 
             AND status = 'Yes'
-            AND sms_received_no IS NOT NULL
-            AND sms_received_no != ''
-            AND LENGTH(sms_received_no) > 5
+            AND directdials IS NOT NULL
+            AND directdials::text != 'null'
+            AND directdials::text != '""'
+            AND directdials::text != '[]'
+            AND LENGTH(directdials::text) > 5
             ORDER BY id
             LIMIT 5
         """)
@@ -310,7 +355,7 @@ if __name__ == "__main__":
 
         call_list = []
         
-        for full_name, url_string, sms_received_no, record_id in records:
+        for full_name, url_string, directdials, record_id in records:
             # Extract first URL
             first_url = extract_first_url(url_string)
             if not first_url:
@@ -321,8 +366,8 @@ if __name__ == "__main__":
             if not job_details or not job_details.get('job_title'):
                 continue
 
-            # Extract valid phone number from sms_received_no
-            phone_number = extract_valid_phone(sms_received_no)
+            # Extract valid phone number from directdials
+            phone_number = extract_valid_phone(directdials)
             if phone_number:
                 call_list.append((full_name, job_details, phone_number))
 
@@ -333,13 +378,8 @@ if __name__ == "__main__":
             print("❌ No valid records found to call.")
             exit()
 
-        # Show only essential information
-        print(f"📞 Making {len(call_list)} calls:\n")
-        for i, (name, job_details, phone) in enumerate(call_list, 1):
-            job_title = job_details.get('job_title', 'Unknown')
-            print(f"  {i}. {name} | {job_title} | {phone}")
-        
-        print("\n🚀 Starting calls now...\n")
+        # Display detailed preview of all calls
+        display_call_preview(call_list)
 
         # Store call results for summary
         call_results = []
