@@ -6,6 +6,9 @@ import time
 import json
 import os
 from dotenv import load_dotenv
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Load environment variables from .env file
 load_dotenv(override=True)
@@ -56,9 +59,13 @@ def analyze_call_interest(call_id, full_name):
                 "Content-Type": "application/json"
             },
             json={
-                "goal": "Determine if the caller is interested in taking a job",
+                "goal": "Analyze the caller's response to the job opportunity call and determine their interest level and intent",
                 "questions": [
-                    ["Is the caller interested in taking a job (e.g., said 'interested,' 'apply,' asked about job details, or expressed intent to work)?", "boolean"]
+                    ["Based on the conversation, is the caller genuinely interested in the job opportunity (expressed interest, asked questions about the job, wanted more details, or showed positive engagement)?", "boolean"],
+                    ["What is the caller's primary response category: 'interested' (wants the job/more info), 'not_interested' (clearly declined/not interested), 'callback_later' (wants to be contacted later/needs time), 'no_answer' (didn't answer or very brief interaction), or 'unclear' (mixed signals)?", "string"],
+                    ["What specific concerns, questions, or requirements did the caller mention about the job opportunity?", "string"],
+                    ["What was the main reason behind the caller's response? Be specific about what they said or their primary concern/interest.", "string"],
+                    ["Did the caller ask for more information, request a callback, or show any form of engagement with the opportunity?", "boolean"]
                 ]
             },
             timeout=30
@@ -66,17 +73,72 @@ def analyze_call_interest(call_id, full_name):
 
         if response.status_code == 200:
             response_json = response.json()
-            if "answers" in response_json:
-                is_interested = response_json["answers"][0]
-                call_intent = "positive" if is_interested else "negative"
-                return call_intent, is_interested
+            print(f"🔍 Analysis response for {full_name}: {response_json}")
+            
+            if "answers" in response_json and response_json["answers"] is not None:
+                answers = response_json["answers"]
+                
+                # Safely extract answers with proper None checks
+                is_interested = answers[0] if len(answers) > 0 and answers[0] is not None else False
+                primary_response = answers[1] if len(answers) > 1 and answers[1] is not None else "unclear"
+                concerns = answers[2] if len(answers) > 2 and answers[2] is not None else "No specific concerns mentioned"
+                reason = answers[3] if len(answers) > 3 and answers[3] is not None else "No specific reason provided"
+                showed_engagement = answers[4] if len(answers) > 4 and answers[4] is not None else False
+                
+                # Convert to string and clean up
+                primary_response = str(primary_response).lower().strip()
+                concerns = str(concerns).strip() if concerns and str(concerns).lower() not in ['none', 'null', ''] else "No specific concerns mentioned"
+                reason = str(reason).strip() if reason and str(reason).lower() not in ['none', 'null', ''] else "No specific reason provided"
+                
+                # Map to yes/no/later
+                call_intent = "no"  # Default
+                if primary_response == "interested" or is_interested or showed_engagement:
+                    call_intent = "yes"
+                elif primary_response == "callback_later" or "later" in primary_response:
+                    call_intent = "later"
+                elif primary_response in ["not_interested", "no_answer", "unclear"]:
+                    call_intent = "no"
+                
+                return {
+                    'call_intent': call_intent,
+                    'is_interested': is_interested,
+                    'concerns': concerns,
+                    'reason': reason,
+                    'showed_engagement': showed_engagement,
+                    'raw_intent': primary_response
+                }
             else:
-                return "unknown", None
+                print(f"⚠️ No answers in analysis response for {full_name}")
+                return {
+                    'call_intent': "no",  # Default to 'no' for failed analysis
+                    'is_interested': None,
+                    'concerns': "Analysis failed - no answers received",
+                    'reason': "Analysis failed - no answers received",
+                    'showed_engagement': None,
+                    'raw_intent': "unknown"
+                }
         else:
-            return "error", None
+            print(f"❌ Analysis API error for {full_name}: {response.status_code}")
+            print(f"Response: {response.text}")
+            return {
+                'call_intent': "no",  # Default to 'no' for API errors
+                'is_interested': None,
+                'concerns': f"API Error - Status {response.status_code}",
+                'reason': f"API Error - Status {response.status_code}",
+                'showed_engagement': None,
+                'raw_intent': "error"
+            }
 
     except Exception as e:
-        return "error", None
+        print(f"❌ Error analyzing call for {full_name}: {str(e)}")
+        return {
+            'call_intent': "no",  # Default to 'no' for exceptions
+            'is_interested': None,
+            'concerns': f"Exception occurred: {str(e)}",
+            'reason': f"Exception occurred: {str(e)}",
+            'showed_engagement': None,
+            'raw_intent': "error"
+        }
 
 def extract_first_url(url_string):
     """Extracts the first URL from a string that may contain multiple URLs separated by ';'"""
@@ -161,14 +223,58 @@ def extract_valid_phone(directdials):
                 return clean
     return None
 
+def get_call_summary_directly(call_id, full_name):
+    """Directly fetch call summary from the API without analysis"""
+    try:
+        session = requests.Session()
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+        session.mount("https://", HTTPAdapter(max_retries=retries))
+        
+        response = session.get(
+            f"https://api.bland.ai/v1/calls/{call_id}",
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            timeout=60  # Increased timeout
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            return {
+                'summary': result.get('summary', 'No summary available'),
+                'transcript': result.get('transcript', 'No transcript available'),
+                'status': result.get('status', 'unknown'),
+                'duration': result.get('corrected_duration', result.get('duration', 'Unknown')),
+                'answered': result.get('answered', False),
+                'created_at': result.get('created_at'),
+                'queue_time': result.get('queue_time'),
+                'ring_time': result.get('ring_time'),
+                'completed': result.get('completed', False)
+            }
+        else:
+            print(f"❌ Failed to fetch call summary for {full_name}: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error fetching call summary for {full_name}: {str(e)}")
+        return None
+
 def fetch_call_details(call_id, full_name):
-    """Fetches call details and analyzes the call for interest"""
-    while True:
+    """Fetches call details and analyzes the call for interest with retries"""
+    print(f"🔄 Waiting for call completion: {full_name} (ID: {call_id})")
+    
+    # Set up retry strategy
+    session = requests.Session()
+    retries = Retry(total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    
+    max_attempts = 45
+    attempt = 0
+
+    while attempt < max_attempts:
         try:
-            response = requests.get(
+            response = session.get(
                 f"https://api.bland.ai/v1/calls/{call_id}",
                 headers={"Authorization": f"Bearer {API_KEY}"},
-                timeout=20
+                timeout=60
             )
 
             if response.status_code == 200:
@@ -177,24 +283,152 @@ def fetch_call_details(call_id, full_name):
                 completed = result.get("completed")
 
                 if completed or status == "completed":
-                    call_intent, is_interested = analyze_call_interest(call_id, full_name)
+                    print(f"✅ Call completed for {full_name}, analyzing...")
+                    
+                    # Get enhanced analysis
+                    analysis_result = analyze_call_interest(call_id, full_name)
+                    
+                    # Extract additional details
+                    call_summary = result.get('summary', 'No summary available')
+                    transcript = result.get('transcript', 'No transcript available')
                     
                     return {
                         'name': full_name,
                         'call_id': call_id,
                         'status': status,
-                        'duration': result.get('corrected_duration'),
-                        'call_intent': call_intent,
-                        'is_interested': is_interested,
-                        'summary': result.get('summary')
+                        'duration': result.get('corrected_duration', result.get('duration', 'Unknown')),
+                        'call_intent': analysis_result['call_intent'],
+                        'is_interested': analysis_result['is_interested'],
+                        'concerns': analysis_result['concerns'],
+                        'reason': analysis_result['reason'],
+                        'showed_engagement': analysis_result['showed_engagement'],
+                        'raw_intent': analysis_result['raw_intent'],
+                        'summary': call_summary,
+                        'transcript': transcript,
+                        'created_at': result.get('created_at'),
+                        'answered': result.get('answered', False),
+                        'queue_time': result.get('queue_time'),
+                        'ring_time': result.get('ring_time')
                     }
+                elif status == "failed" or status == "error":
+                    print(f"❌ Call failed for {full_name}: {status}")
+                    call_summary = result.get('summary', 'Call failed - no summary available')
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': status,
+                        'call_intent': 'no',  # Map failed/error to 'no'
+                        'summary': call_summary,
+                        'transcript': result.get('transcript', 'No transcript available'),
+                        'error': result.get('error_message', 'Call failed'),
+                        'answered': result.get('answered', False),
+                        'duration': result.get('corrected_duration', result.get('duration', 'Unknown'))
+                    }
+                else:
+                    print(f"⏳ Call in progress for {full_name}: {status}")
             else:
-                return None
+                print(f"❌ API error for {full_name}: {response.status_code}")
+                call_data = get_call_summary_directly(call_id, full_name)
+                if call_data:
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': call_data.get('status', 'error'),
+                        'call_intent': 'no',  # Map API error to 'no'
+                        'summary': call_data.get('summary', 'API error - no summary available'),
+                        'transcript': call_data.get('transcript', 'No transcript available'),
+                        'error': f"API error: {response.status_code}",
+                        'answered': call_data.get('answered', False),
+                        'duration': call_data.get('duration', 'Unknown')
+                    }
+                else:
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': 'error',
+                        'call_intent': 'no',  # Map API error to 'no'
+                        'summary': 'API error - no summary available',
+                        'error': f"API error: {response.status_code}"
+                    }
 
-        except Exception as e:
-            return None
+        except requests.exceptions.Timeout as e:
+            print(f"⚠️ Timeout error for {full_name} (attempt {attempt + 1}/{max_attempts}): {str(e)}")
+            if attempt == max_attempts - 1:
+                print(f"🔍 Final attempt - trying to get summary directly for {full_name}")
+                call_data = get_call_summary_directly(call_id, full_name)
+                if call_data:
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': call_data.get('status', 'timeout'),
+                        'call_intent': 'no',  # Map timeout to 'no'
+                        'summary': call_data.get('summary', 'Timeout - but summary retrieved'),
+                        'transcript': call_data.get('transcript', 'No transcript available'),
+                        'error': 'Timeout during polling but call may have completed',
+                        'answered': call_data.get('answered', False),
+                        'duration': call_data.get('duration', 'Unknown')
+                    }
+                else:
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': 'timeout',
+                        'call_intent': 'no',  # Map timeout to 'no'
+                        'summary': 'Timeout - unable to retrieve summary',
+                        'error': 'Timeout during polling'
+                    }
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Network error for {full_name} (attempt {attempt + 1}/{max_attempts}): {str(e)}")
+            if attempt == max_attempts - 1:
+                call_data = get_call_summary_directly(call_id, full_name)
+                if call_data:
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': call_data.get('status', 'error'),
+                        'call_intent': 'no',  # Map network error to 'no'
+                        'summary': call_data.get('summary', 'Network error but summary retrieved'),
+                        'transcript': call_data.get('transcript', 'No transcript available'),
+                        'error': f'Network error: {str(e)}',
+                        'answered': call_data.get('answered', False),
+                        'duration': call_data.get('duration', 'Unknown')
+                    }
+                else:
+                    return {
+                        'name': full_name,
+                        'call_id': call_id,
+                        'status': 'error',
+                        'call_intent': 'no',  # Map network error to 'no'
+                        'summary': 'Network error - unable to retrieve summary',
+                        'error': str(e)
+                    }
 
-        time.sleep(5)  # Check every 5 seconds
+        attempt += 1
+        time.sleep(10)
+
+    print(f"❌ Max attempts reached for {full_name} - attempting final summary fetch")
+    call_data = get_call_summary_directly(call_id, full_name)
+    if call_data:
+        return {
+            'name': full_name,
+            'call_id': call_id,
+            'status': call_data.get('status', 'timeout'),
+            'call_intent': 'no',  # Map max attempts to 'no'
+            'summary': call_data.get('summary', 'Max attempts reached but summary retrieved'),
+            'transcript': call_data.get('transcript', 'No transcript available'),
+            'error': 'Max polling attempts reached but call may have completed',
+            'answered': call_data.get('answered', False),
+            'duration': call_data.get('duration', 'Unknown')
+        }
+    else:
+        return {
+            'name': full_name,
+            'call_id': call_id,
+            'status': 'timeout',
+            'call_intent': 'no',  # Map max attempts to 'no'
+            'summary': 'Max attempts reached - unable to retrieve summary',
+            'error': 'Max polling attempts reached'
+        }
 
 def make_call(full_name, job_details, phone_number, results_list=None):
     """Makes a call and returns call analysis results"""
@@ -202,7 +436,6 @@ def make_call(full_name, job_details, phone_number, results_list=None):
     location = job_details.get('location', 'Unknown Location')
     pay = job_details.get('pay', 'Competitive Pay')
     
-    # Print detailed call initiation info
     print(f"📞 Initiating call for {full_name}:")
     print(f"   📋 Job Title: {job_title}")
     print(f"   📍 Location: {location}")
@@ -242,70 +475,137 @@ def make_call(full_name, job_details, phone_number, results_list=None):
                 print(f"✅ Call initiated successfully for {full_name} (Call ID: {call_id})")
                 call_result = fetch_call_details(call_id, full_name)
                 
-                if results_list is not None and call_result:
-                    results_list.append(call_result)
+                if results_list is not None:
+                    if call_result:
+                        results_list.append(call_result)
+                    else:
+                        results_list.append({
+                            'name': full_name,
+                            'call_id': call_id,
+                            'status': 'unknown',
+                            'call_intent': 'no',  # Map to 'no' for failed fetch
+                            'summary': 'Failed to fetch call details',
+                            'error': 'Failed to fetch call details'
+                        })
                 
                 return call_result
             else:
                 print(f"❌ Failed to get call ID for {full_name}")
-                return None
+                error_result = {
+                    'name': full_name,
+                    'call_id': 'N/A',
+                    'status': 'failed',
+                    'call_intent': 'no',  # Map to 'no' for no call ID
+                    'summary': 'Failed to initiate call - no call ID returned',
+                    'error': 'No call ID returned'
+                }
+                if results_list is not None:
+                    results_list.append(error_result)
+                return error_result
         else:
             print(f"❌ Call failed for {full_name}. Status: {response.status_code}")
-            return None
+            print(f"Response: {result}")
+            error_result = {
+                'name': full_name,
+                'call_id': 'N/A',
+                'status': 'failed',
+                'call_intent': 'no',  # Map to 'no' for failed call
+                'summary': f'Call initiation failed with status {response.status_code}',
+                'error': f'HTTP {response.status_code}: {result}'
+            }
+            if results_list is not None:
+                results_list.append(error_result)
+            return error_result
 
     except Exception as e:
         print(f"❌ Error making call for {full_name}: {str(e)}")
-        return None
+        error_result = {
+            'name': full_name,
+            'call_id': 'N/A',
+            'status': 'error',
+            'call_intent': 'no',  # Map to 'no' for exceptions
+            'summary': f'Exception during call initiation: {str(e)}',
+            'error': str(e)
+        }
+        if results_list is not None:
+            results_list.append(error_result)
+        return error_result
 
 def print_call_summary(call_results):
-    """Prints a summary of all call results"""
+    """Prints a detailed summary of all call results"""
     if not call_results:
         print("\n❌ No call results to summarize.")
         return
     
-    print("\n" + "="*60)
+    print("\n" + "="*100)
     print("📊 DETAILED CALL SUMMARY")
-    print("="*60)
+    print("="*100)
     
-    interested_count = 0
-    not_interested_count = 0
-    unknown_count = 0
+    yes_count = 0
+    no_count = 0
+    later_count = 0
     
     for result in call_results:
-        name = result.get('name', 'Unknown')
-        call_intent = result.get('call_intent', 'unknown')
-        duration = result.get('duration', 'Unknown')
-        call_id = result.get('call_id', 'Unknown')
+        # Safely get all values with proper None checks
+        name = result.get('name', 'Unknown') if result else 'Unknown'
+        call_intent = result.get('call_intent', 'no') if result else 'no'
+        duration = result.get('duration', 'Unknown') if result else 'Unknown'
+        call_id = result.get('call_id', 'Unknown') if result else 'Unknown'
+        summary = result.get('summary', 'No summary available') if result else 'No summary available'
+        concerns = result.get('concerns', 'None') if result else 'None'
+        reason = result.get('reason', 'Not specified') if result else 'Not specified'
+        answered = result.get('answered', 'Unknown') if result else 'Unknown'
+        showed_engagement = result.get('showed_engagement', 'Unknown') if result else 'Unknown'
         
-        if call_intent == 'positive':
-            interested_count += 1
+        # Ensure string conversion for safety
+        concerns = str(concerns) if concerns is not None else 'None'
+        reason = str(reason) if reason is not None else 'Not specified'
+        summary = str(summary) if summary is not None else 'No summary available'
+        
+        # Count by intent
+        if call_intent == 'yes':
+            yes_count += 1
             status_emoji = "✅"
-        elif call_intent == 'negative':
-            not_interested_count += 1
+        elif call_intent == 'later':
+            later_count += 1
+            status_emoji = "⏳"
+        else:  # 'no' or any unexpected value
+            no_count += 1
             status_emoji = "❌"
-        else:
-            unknown_count += 1
-            status_emoji = "❓"
         
         print(f"{status_emoji} {name}")
         print(f"   📞 Call ID: {call_id}")
         print(f"   🎯 Intent: {call_intent.upper()}")
-        print(f"   ⏱️  Duration: {duration}s")
-        if result.get('summary'):
-            print(f"   📝 Summary: {result.get('summary')[:100]}...")
-        print("-" * 40)
+        print(f"   ⏱️ Duration: {duration}s")
+        print(f"   📞 Answered: {answered}")
+        print(f"   🤝 Showed Engagement: {showed_engagement}")
+        
+        if call_intent in ['yes', 'later']:
+            print(f"   💭 Reason: {reason}")
+            print(f"   ⚠️ Concerns: {concerns}")
+        
+        print(f"   📝 Summary: {summary}")
+        
+        if result and result.get('error'):
+            print(f"   ❌ Error: {result.get('error')}")
+            
+        print("-" * 100)
     
     print(f"\n📊 STATISTICS:")
-    print(f"✅ Interested: {interested_count}")
-    print(f"❌ Not Interested: {not_interested_count}")
-    print(f"❓ Unknown/Error: {unknown_count}")
+    print(f"✅ Yes/Interested: {yes_count}")
+    print(f"❌ No/Not Interested: {no_count}")
+    print(f"⏳ Later/Callback Requested: {later_count}")
     print(f"📞 Total Calls: {len(call_results)}")
     
     if len(call_results) > 0:
-        success_rate = (interested_count / len(call_results)) * 100
-        print(f"📊 Interest Rate: {success_rate:.1f}%")
+        success_rate = (yes_count / len(call_results)) * 100
+        callback_rate = (later_count / len(call_results)) * 100
+        engagement_rate = ((yes_count + later_count) / len(call_results)) * 100
+        print(f"📊 Positive Interest Rate: {success_rate:.1f}%")
+        print(f"📊 Callback Request Rate: {callback_rate:.1f}%")
+        print(f"📊 Overall Engagement Rate: {engagement_rate:.1f}%")
     
-    print("="*60)
+    print("="*100)  
 
 def display_call_preview(call_list):
     """Display detailed preview of all calls to be made"""
