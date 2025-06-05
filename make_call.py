@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
 # Load environment variables from .env file
 load_dotenv(override=True)
 
@@ -430,12 +429,24 @@ def fetch_call_details(call_id, full_name):
             'error': 'Max polling attempts reached'
         }
 
+import re
+
 def make_call(full_name, job_details, phone_number, results_list=None):
     """Makes a call and returns call analysis results"""
     job_title = job_details.get('job_title', 'Unknown Position')
     location = job_details.get('location', 'Unknown Location')
     pay = job_details.get('pay', 'Competitive Pay')
-    
+
+    # Transform pay format from "$2,285 - $2,380" to "2285 dollars - 2380 dollars"
+    pay_match = re.findall(r"\$?([\d,]+)", pay)
+    if pay_match:
+        numeric_values = [val.replace(',', '') for val in pay_match]
+        if len(numeric_values) == 2:
+            pay = f"{numeric_values[0]} dollars - {numeric_values[1]} dollars"
+        elif len(numeric_values) == 1:
+            pay = f"{numeric_values[0]} dollars"
+        pay = pay.replace('-', 'to')
+
     print(f"📞 Initiating call for {full_name}:")
     print(f"   📋 Job Title: {job_title}")
     print(f"   📍 Location: {location}")
@@ -447,6 +458,9 @@ def make_call(full_name, job_details, phone_number, results_list=None):
     data = {
         "phone_number": phone_number,
         "pathway_id": PATHWAY_ID,
+        "pronunciation_guide": {
+            "$": "dollars"
+        },
         "request_data": {
             "full_name": full_name,
             "job_title": job_title,
@@ -455,6 +469,7 @@ def make_call(full_name, job_details, phone_number, results_list=None):
             "user_name": full_name
         }
     }
+
 
     try:
         response = requests.post(
