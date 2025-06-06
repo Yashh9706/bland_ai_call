@@ -6,9 +6,18 @@ import time
 import json
 import os
 from dotenv import load_dotenv
-import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from datetime import datetime, timedelta
+import threading
+import time
+import signal
+import sys
+call_results_lock = threading.Lock()
+
+
 # Load environment variables from .env file
 load_dotenv(override=True)
 
@@ -26,6 +35,24 @@ db_params = {
 API_KEY = os.getenv("BLAND_API_KEY")
 PATHWAY_ID = os.getenv("BLAND_PATHWAY_ID")
 print(PATHWAY_ID)
+
+# Scheduler setup
+DATABASE_URL = f"postgresql+psycopg2://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['dbname']}?sslmode={db_params['sslmode']}"
+jobstores = {
+    'default': SQLAlchemyJobStore(url=DATABASE_URL)
+}
+scheduler = BackgroundScheduler(
+    jobstores=jobstores,
+    job_defaults={
+        'misfire_grace_time': 30,  # Allow 30 seconds grace period for missed jobs
+        'coalesce': True,          # Run missed jobs once instead of multiple times
+        'max_instances': 1         # Limit to one instance per job
+    },
+    executors={
+        'default': {'type': 'threadpool', 'max_workers': 10}  # Use thread pool with 10 workers
+    }
+)
+scheduler.start()
 
 # Table name - FROM ENV (with fallback)
 TABLE_NAME = os.getenv("TABLE_NAME", "person_details_dummy")
@@ -47,6 +74,75 @@ def validate_env_variables():
         for var in missing_vars:
             print(f"   - {var}")
         exit(1)
+
+def log_scheduled_call(cursor, user_id, full_name, phone_number, job_id, run_time, call_id=None):
+    """Logs scheduled call details to the person_details_dummy table, excluding status"""
+    try:
+        # Ensure required columns exist in person_details_dummy (excluding status)
+        required_columns = ['job_id', 'run_time', 'call_id']
+        existing_columns = set()
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = %s
+        """, ('person_details_dummy',))
+        for row in cursor.fetchall():
+            existing_columns.add(row[0])
+
+        for column in required_columns:
+            if column not in existing_columns:
+                if column == 'job_id':
+                    cursor.execute(f"""
+                        ALTER TABLE person_details_dummy
+                        ADD COLUMN job_id VARCHAR(100)
+                    """)
+                elif column == 'run_time':
+                    cursor.execute(f"""
+                        ALTER TABLE person_details_dummy
+                        ADD COLUMN run_time TIMESTAMP
+                    """)
+                elif column == 'call_id':
+                    cursor.execute(f"""
+                        ALTER TABLE person_details_dummy
+                        ADD COLUMN call_id VARCHAR(50)
+                    """)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📝 Added column {column} to person_details_dummy table")
+        
+        # Update person_details_dummy with call schedule details, excluding status
+        cursor.execute(f"""
+            UPDATE person_details_dummy
+            SET job_id = %s, run_time = %s, call_id = %s
+            WHERE id = %s
+        """, (job_id, run_time, call_id, user_id))
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📝 Logged scheduled call for {full_name} (User ID: {user_id}) in person_details_dummy")
+        return True
+    except psycopg2.Error as e:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Error logging scheduled call for {full_name} (User ID: {user_id}): {e}")
+        raise
+
+def signal_handler(sig, frame):
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🛑 Received shutdown signal, stopping scheduler...")
+    if scheduler.running:
+        scheduler.shutdown(wait=True)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🛑 Scheduler shut down successfully")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🛑 Script execution completed")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl+C
+signal.signal(signal.SIGTERM, signal_handler)  # Handle termination signals
+
+def log_missed_job(cursor, job_id, user_id, full_name):
+    """Logs a missed job to the person_details_dummy table"""
+    try:
+        cursor.execute(f"""
+            UPDATE person_details_dummy
+            SET status = %s
+            WHERE job_id = %s
+        """, ('missed', job_id))
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Logged missed job for {full_name} (User ID: {user_id}, Job ID: {job_id})")
+    except psycopg2.Error as e:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Error logging missed job for {full_name}: {e}")
+
 
 def analyze_call_interest(call_id, full_name):
     """Analyzes the call to determine if the caller showed interest in the job"""
@@ -431,7 +527,7 @@ def fetch_call_details(call_id, full_name):
 
 import re
 
-def make_call(full_name, job_details, phone_number, results_list=None):
+def make_call(full_name, job_details, phone_number, results_list=None, user_id=None):
     """Makes a call and returns call analysis results"""
     job_title = job_details.get('job_title', 'Unknown Position')
     location = job_details.get('location', 'Unknown Location')
@@ -447,13 +543,14 @@ def make_call(full_name, job_details, phone_number, results_list=None):
             pay = f"{numeric_values[0]} dollars"
         pay = pay.replace('-', 'to')
 
-    print(f"📞 Initiating call for {full_name}:")
-    print(f"   📋 Job Title: {job_title}")
-    print(f"   📍 Location: {location}")
-    print(f"   💰 Pay: {pay}")
-    print(f"   📱 Phone: {phone_number}")
-    print(f"   👤 User Name: {full_name}")
-    print("-" * 50)
+    job_id = f"call_{user_id}_{int(datetime.now().timestamp())}"
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📞 Initiating call for {full_name} (User ID: {user_id}, Job ID: {job_id}):")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}]    📋 Job Title: {job_title}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}]    📍 Location: {location}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}]    💰 Pay: {pay}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}]    📱 Phone: {phone_number}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}]    👤 User Name: {full_name}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] " + "-" * 50)
     
     data = {
         "phone_number": phone_number,
@@ -470,9 +567,14 @@ def make_call(full_name, job_details, phone_number, results_list=None):
         }
     }
 
-
     try:
-        response = requests.post(
+        # Create a session with retries
+        session = requests.Session()
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+        session.mount("https://", HTTPAdapter(max_retries=retries))
+        
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🔌 Sending API request to Bland AI...")
+        response = session.post(
             "https://api.bland.ai/v1/calls",
             headers={
                 "Authorization": f"Bearer {API_KEY}",
@@ -483,68 +585,80 @@ def make_call(full_name, job_details, phone_number, results_list=None):
         )
 
         result = response.json()
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📡 API Response: Status={response.status_code}, Content={result}")
 
         if response.status_code == 200:
             call_id = result.get("call_id")
             if call_id:
-                print(f"✅ Call initiated successfully for {full_name} (Call ID: {call_id})")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ✅ Call initiated successfully for {full_name} (Call ID: {call_id})")
                 call_result = fetch_call_details(call_id, full_name)
                 
-                if results_list is not None:
-                    if call_result:
+                if results_list is not None and call_result:
+                    with call_results_lock:
+                        call_result['user_id'] = user_id
                         results_list.append(call_result)
-                    else:
-                        results_list.append({
-                            'name': full_name,
-                            'call_id': call_id,
-                            'status': 'unknown',
-                            'call_intent': 'no',  # Map to 'no' for failed fetch
-                            'summary': 'Failed to fetch call details',
-                            'error': 'Failed to fetch call details'
-                        })
                 
                 return call_result
             else:
-                print(f"❌ Failed to get call ID for {full_name}")
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Failed to get call ID for {full_name}")
                 error_result = {
                     'name': full_name,
                     'call_id': 'N/A',
                     'status': 'failed',
-                    'call_intent': 'no',  # Map to 'no' for no call ID
+                    'call_intent': 'no',
                     'summary': 'Failed to initiate call - no call ID returned',
-                    'error': 'No call ID returned'
+                    'error': 'No call ID returned',
+                    'user_id': user_id
                 }
                 if results_list is not None:
-                    results_list.append(error_result)
+                    with call_results_lock:
+                        results_list.append(error_result)
                 return error_result
         else:
-            print(f"❌ Call failed for {full_name}. Status: {response.status_code}")
-            print(f"Response: {result}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Call failed for {full_name}. Status: {response.status_code}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] Response: {result}")
             error_result = {
                 'name': full_name,
                 'call_id': 'N/A',
                 'status': 'failed',
-                'call_intent': 'no',  # Map to 'no' for failed call
+                'call_intent': 'no',
                 'summary': f'Call initiation failed with status {response.status_code}',
-                'error': f'HTTP {response.status_code}: {result}'
+                'error': f'HTTP {response.status_code}: {result}',
+                'user_id': user_id
             }
             if results_list is not None:
-                results_list.append(error_result)
+                with call_results_lock:
+                    results_list.append(error_result)
             return error_result
 
     except Exception as e:
-        print(f"❌ Error making call for {full_name}: {str(e)}")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Error making call for {full_name}: {str(e)}")
         error_result = {
             'name': full_name,
             'call_id': 'N/A',
             'status': 'error',
-            'call_intent': 'no',  # Map to 'no' for exceptions
+            'call_intent': 'no',
             'summary': f'Exception during call initiation: {str(e)}',
-            'error': str(e)
+            'error': str(e),
+            'user_id': user_id
         }
         if results_list is not None:
-            results_list.append(error_result)
+            with call_results_lock:
+                results_list.append(error_result)
         return error_result
+    
+def handle_response(user_id, full_name, job_details, phone_number, results_list=None):
+    """Schedules a call for a user"""
+    run_time = datetime.now() + timedelta(minutes=1)
+    job_id = f"call_{user_id}_{int(run_time.timestamp())}"  # Unique ID
+    scheduler.add_job(
+        make_call,
+        'date',
+        run_date=run_time,
+        args=[full_name, job_details, phone_number, results_list, user_id],
+        id=job_id
+    )
+    print(f"✅ Call scheduled for user {user_id} ({full_name}) at {run_time}")
 
 def print_call_summary(call_results):
     """Prints a detailed summary of all call results"""
@@ -648,72 +762,157 @@ if __name__ == "__main__":
     try:
         validate_env_variables()
         
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🚀 Starting call scheduling process...")
+        
+        # Update table name
+        TABLE_NAME = "person_details_dummy"
+        
         # Connect to PostgreSQL and fetch records
         conn = psycopg2.connect(**db_params)
         cur = conn.cursor()
         
+        # Check if table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = %s
+            )
+        """, ('person_details_dummy',))
+        table_exists = cur.fetchone()[0]
+        if not table_exists:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Table person_details_dummy does not exist!")
+            cur.close()
+            conn.close()
+            exit()
+
+        # Count total records
+        cur.execute(f"SELECT COUNT(*) FROM {TABLE_NAME}")
+        total_records = cur.fetchone()[0]
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📊 Total records in {TABLE_NAME}: {total_records}")
+
+        # Fetch records without status column
         cur.execute(f"""
-            SELECT full_name, url, directdials, id
+            SELECT id, full_name, url, directdials
             FROM {TABLE_NAME}
             WHERE full_name IS NOT NULL 
             AND url IS NOT NULL 
-            AND status = 'Yes'
             AND directdials IS NOT NULL
-            AND directdials::text != 'null'
-            AND directdials::text != '""'
-            AND directdials::text != '[]'
-            AND LENGTH(directdials::text) > 5
             ORDER BY id
             LIMIT 5
         """)
         records = cur.fetchall()
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📋 Found {len(records)} records matching initial query conditions")
 
         call_list = []
+        used_phone_numbers = set()
         
-        for full_name, url_string, directdials, record_id in records:
+        for user_id, full_name, url_string, directdials in records:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🔍 Processing record: ID={user_id}, Name={full_name}, URL={url_string}, Directdials={directdials}")
+            
+            # Check directdials format
+            if str(directdials).lower() in ['null', '""', '[]'] or len(str(directdials)) <= 5:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⚠️ Skipping {full_name}: Invalid directdials format ({directdials})")
+                continue
+
             # Extract first URL
             first_url = extract_first_url(url_string)
             if not first_url:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⚠️ Skipping {full_name}: No valid URL")
                 continue
 
             # Get job details
             job_details = get_job_details_from_url(cur, first_url)
             if not job_details or not job_details.get('job_title'):
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⚠️ Skipping {full_name}: No valid job details")
                 continue
 
             # Extract valid phone number from directdials
             phone_number = extract_valid_phone(directdials)
             if phone_number:
-                call_list.append((full_name, job_details, phone_number))
-
-        cur.close()
-        conn.close()
+                if phone_number in used_phone_numbers:
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⚠️ Skipping {full_name}: Phone number {phone_number} already scheduled")
+                    continue
+                call_list.append((user_id, full_name, job_details, phone_number))
+                used_phone_numbers.add(phone_number)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ✅ Added {full_name} to call list with phone {phone_number}")
+            else:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⚠️ Skipping {full_name}: No valid phone number")
 
         if not call_list:
-            print("❌ No valid records found to call.")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ No valid records found to call.")
+            cur.close()
+            conn.close()
             exit()
 
         # Display detailed preview of all calls
-        display_call_preview(call_list)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📋 Call Preview:")
+        display_call_preview([(name, job_details, phone) for _, name, job_details, phone in call_list])
 
         # Store call results for summary
         call_results = []
 
-        # Make all calls with threading
-        threads = []
-        
-        for full_name, job_details, phone_number in call_list:
-            thread = threading.Thread(target=make_call, args=(full_name, job_details, phone_number, call_results))
-            thread.start()
-            threads.append(thread)
+        # Track scheduled jobs
+        scheduled_jobs = []
 
-        for thread in threads:
-            thread.join()
+        # Schedule all calls for one minute from now
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🚀 Processing {len(call_list)} calls...")
+        for index, (user_id, full_name, job_details, phone_number) in enumerate(call_list):
+            try:
+                run_time = datetime.now() + timedelta(minutes=1)
+                job_id = f"call_{user_id}_{int(run_time.timestamp())}"
+                if log_scheduled_call(cur, user_id, full_name, phone_number, job_id, run_time):
+                    # Remove any existing job for this user_id
+                    for existing_job_id, existing_user_id, _ in scheduled_jobs[:]:
+                        if existing_user_id == user_id:
+                            scheduler.remove_job(existing_job_id)
+                            scheduled_jobs.remove((existing_job_id, existing_user_id, full_name))
+                            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🗑️ Removed existing job for {full_name} (User ID: {user_id})")
+                    
+                    job = scheduler.add_job(
+                        make_call,
+                        'date',
+                        run_date=run_time,
+                        args=[full_name, job_details, phone_number, call_results, user_id],
+                        id=job_id,
+                        misfire_grace_time=30
+                    )
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ✅ Call scheduled for {full_name} (User ID: {user_id}) at {run_time}")
+                    scheduled_jobs.append((job_id, user_id, full_name))
+                else:
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⚠️ Call not scheduled for {full_name} (User ID: {user_id}): Log failed")
+            except Exception as e:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Failed to schedule call for {full_name}: {str(e)}")
+                continue
 
-        print("\n✅ All calls completed!")
-        print_call_summary(call_results)
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        if not scheduled_jobs:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ No calls were successfully scheduled. Exiting...")
+            exit()
+
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ✅ Call scheduling complete. {len(scheduled_jobs)} calls scheduled.")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⏳ Scheduled calls will execute in background...")
+
+        # Keep the script running to allow scheduled jobs to execute
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ⏳ Keeping scheduler alive. Press Ctrl+C to stop.")
+        while scheduler.get_jobs():
+            time.sleep(10)  # Check every 10 seconds if jobs are still pending
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ✅ All scheduled jobs completed.")
 
     except psycopg2.Error as e:
-        print(f"❌ Database error: {e}")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Database error: {e}")
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Unexpected error: {e}")
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+        # Only shut down the scheduler if no jobs are pending
+        if scheduler.running and not scheduler.get_jobs():
+            try:
+                scheduler.shutdown(wait=True)
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🛑 Scheduler shut down successfully")
+            except Exception as e:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Error during scheduler shutdown: {e}")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🛑 Script execution completed")
