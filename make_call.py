@@ -70,31 +70,9 @@ def validate_env_variables():
         exit(1)
 
 def log_scheduled_call(cursor, user_id, full_name, phone_number, job_id, run_time, call_id=None):
-    """Logs scheduled call details to the person_details_dummy table, excluding status"""
-    try:
-        required_columns = ['job_id', 'run_time', 'call_id']
-        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = %s", ('person_details_dummy',))
-        existing_columns = {row[0] for row in cursor.fetchall()}
-
-        for column in required_columns:
-            if column not in existing_columns:
-                if column == 'job_id':
-                    cursor.execute("ALTER TABLE person_details_dummy ADD COLUMN job_id VARCHAR(100)")
-                elif column == 'run_time':
-                    cursor.execute("ALTER TABLE person_details_dummy ADD COLUMN run_time TIMESTAMP")
-                elif column == 'call_id':
-                    cursor.execute("ALTER TABLE person_details_dummy ADD COLUMN call_id VARCHAR(50)")
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📝 Added column {column} to person_details_dummy table")
-        
-        cursor.execute(
-            "UPDATE person_details_dummy SET job_id = %s, run_time = %s, call_id = %s WHERE id = %s",
-            (job_id, run_time, call_id, user_id)
-        )
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📝 Logged scheduled call for {full_name} (User ID: {user_id}) in person_details_dummy")
-        return True
-    except psycopg2.Error as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Error logging scheduled call for {full_name} (User ID: {user_id}): {e}")
-        raise
+    """Logs scheduled call details to console without modifying the database"""
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 📝 Scheduled call for {full_name} (User ID: {user_id}) - Job ID: {job_id}, Run Time: {run_time}, Call ID: {call_id or 'N/A'}")
+    return True
 
 def signal_handler(sig, frame):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] 🛑 Received shutdown signal, stopping scheduler...")
@@ -108,12 +86,8 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 def log_missed_job(cursor, job_id, user_id, full_name):
-    """Logs a missed job to the person_details_dummy table"""
-    try:
-        cursor.execute("UPDATE person_details_dummy SET status = %s WHERE job_id = %s", ('missed', job_id))
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Logged missed job for {full_name} (User ID: {user_id}, Job ID: {job_id})")
-    except psycopg2.Error as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Error logging missed job for {full_name}: {e}")
+    """Logs a missed job to the console without modifying the database"""
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}] ❌ Missed job for {full_name} (User ID: {user_id}, Job ID: {job_id})")
 
 def analyze_call_interest(call_id, full_name):
     """Analyzes the call to determine if the caller showed interest in the job"""
@@ -365,6 +339,7 @@ def make_call(full_name, job_details, phone_number, results_list=None, user_id=N
         "phone_number": phone_number,
         "pathway_id": PATHWAY_ID,
         "pronunciation_guide": {"$": "dollars"},
+        "voice": "85a2c852-2238-4651-acf0-e5cbe02186f2",
         "request_data": {
             "full_name": full_name,
             "job_title": job_title,
