@@ -447,14 +447,14 @@ class CallManager:
             pay = job_details.get('pay', 'Competitive Pay')
             print(f"""\
 CALL #{i}
-👤 Full Name: {name}
-📋 Job Title: {job_title}
-📍 Location: {location}
-💰 Pay: {pay}
-📱 Phone: {phone}
+Full Name: {name}
+Job Title: {job_title}
+Location: {location}
+Pay: {pay}
+Phone: {phone}
 {"-"*80}
 """)
-        print(f"\n🚀 Starting {len(call_list)} calls now...\n")
+        print(f"\nStarting {len(call_list)} calls now...\n")
     
     def print_call_summary(self, call_results: List[Dict]):
         """Prints a summary of call results."""
