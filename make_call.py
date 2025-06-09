@@ -14,9 +14,12 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 import signal
 import sys
 from contextlib import contextmanager
-import uuid
+from flask import Flask, request, jsonify
 
 call_results_lock = threading.Lock()
+
+app = Flask(__name__)
+call_webhook_results = {}  # Store webhook results by call_id
 
 # Load environment variables
 load_dotenv(override=True)
@@ -86,6 +89,37 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
+
+@app.route('/webhook', methods=['POST'])
+def handle_end_call_webhook():
+    """Handle incoming webhook when a call ends."""
+    try:
+        webhook_data = request.get_json()
+        call_id = webhook_data.get('call_id')
+        completed = webhook_data.get('completed', False)
+        call_ended_by = webhook_data.get('call_ended_by', 'UNKNOWN')
+        summary = webhook_data.get('summary', 'No summary available')
+        
+        log_message("INFO", f"🔔 WEBHOOK RECEIVED - Call {call_id} ended by {call_ended_by}")
+        
+        # Store webhook result
+        call_webhook_results[call_id] = {
+            'completed': completed,
+            'summary': summary,
+            'call_ended_by': call_ended_by,
+            'webhook_received': True
+        }
+        
+        return jsonify({"status": "success", "message": "Webhook processed"}), 200
+        
+    except Exception as e:
+        log_message("ERROR", f"Error processing webhook: {str(e)}")
+        return jsonify({"error": "Failed to process webhook"}), 500
+
+def run_webhook_server():
+    """Run the Flask webhook server in background"""
+    log_message("INFO", "🚀 Starting webhook server on http://localhost:5000")
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)
 
 def analyze_call_interest(call_id, full_name):
     """Analyzes call to determine intent using the provided API endpoint."""
@@ -203,51 +237,50 @@ def handle_api_error(full_name, call_id, response, error_type, call_data=None):
     }
 
 def fetch_call_details(call_id, full_name):
-    """Fetches and analyzes call details."""
-    log_message("INFO", f"Waiting for call completion: {full_name} (ID: {call_id})")
-    session = requests.Session()
-    retries = Retry(total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
-    session.mount("https://", HTTPAdapter(max_retries=retries))
-    max_attempts = 45
-    for attempt in range(max_attempts):
-        try:
-            response = session.get(
-                f"https://api.bland.ai/v1/calls/{call_id}",
-                headers={"Authorization": f"Bearer {API_KEY}"},
-                timeout=10
-            )
-            if response.status_code != 200:
+    """Wait for webhook notification instead of polling API."""
+    log_message("INFO", f"Waiting for webhook notification: {full_name} (ID: {call_id})")
+    
+    max_wait_time = 300  # 5 minutes timeout
+    start_time = time.time()
+    
+    while time.time() - start_time < max_wait_time:
+        # Check if webhook has been received
+        if call_id in call_webhook_results:
+            webhook_data = call_webhook_results[call_id]
+            log_message("SUCCESS", f"Webhook received for {full_name}, processing results...")
+            
+            # Get call intent analysis
+            analysis_result = analyze_call_interest(call_id, full_name)
+            
+            # Use webhook summary or get fresh summary
+            summary = webhook_data.get('summary', 'No summary available')
+            if summary == 'No summary available':
                 call_data = get_call_summary_directly(call_id, full_name)
-                return handle_api_error(full_name, call_id, response, 'error', call_data)
-            result = response.json()
-            if result.get("completed") or result.get("status") == "completed":
-                log_message("SUCCESS", f"Call completed for {full_name}, analyzing...")
-                analysis_result = analyze_call_interest(call_id, full_name)
-                call_data = get_call_summary_directly(call_id, full_name)
-                return {
-                    'name': full_name,
-                    'call_id': call_id,
-                    'call_intent': analysis_result['call_intent'],
-                    'summary': call_data['summary']
-                }
-            elif result.get("status") in ["failed", "error"]:
-                log_message("ERROR", f"Call failed for {full_name}: {result.get('status')}")
-                call_data = get_call_summary_directly(call_id, full_name)
-                return handle_api_error(full_name, call_id, None, result.get('status'), call_data)
-            log_message("INFO", f"Call in progress for {full_name}: {result.get('status')}")
-            time.sleep(10)
-        except requests.exceptions.Timeout as e:
-            log_message("WARNING", f"Timeout for {full_name} (attempt {attempt + 1}/{max_attempts}): {str(e)}")
-            if attempt == max_attempts - 1:
-                call_data = get_call_summary_directly(call_id, full_name)
-                return handle_api_error(full_name, call_id, None, 'timeout', call_data)
-        except requests.exceptions.RequestException as e:
-            log_message("WARNING", f"Network error for {full_name} (attempt {attempt + 1}/{max_attempts}): {str(e)}")
-            if attempt == max_attempts - 1:
-                call_data = get_call_summary_directly(call_id, full_name)
-                return handle_api_error(full_name, call_id, None, 'error', call_data)
+                summary = call_data['summary']
+            
+            # Clean up webhook result
+            del call_webhook_results[call_id]
+            
+            return {
+                'name': full_name,
+                'call_id': call_id,
+                'call_intent': analysis_result['call_intent'],
+                'summary': summary
+            }
+        
+        time.sleep(2)  # Check every 2 seconds
+    
+    # Timeout - fallback to API call
+    log_message("WARNING", f"Webhook timeout for {full_name}, falling back to API polling")
     call_data = get_call_summary_directly(call_id, full_name)
-    return handle_api_error(full_name, call_id, None, 'timeout', call_data)
+    analysis_result = analyze_call_interest(call_id, full_name)
+    
+    return {
+        'name': full_name,
+        'call_id': call_id,
+        'call_intent': analysis_result['call_intent'],
+        'summary': call_data['summary']
+    }
 
 def make_call(full_name, job_details, phone_number, results_list, user_id):
     """Initiates a call and returns analysis results."""
@@ -260,7 +293,10 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
         pay = f"{numeric_values[0]} dollars"
         if len(numeric_values) == 2:
             pay = f"{numeric_values[0]} dollars to {numeric_values[1]} dollars"
+    
     log_message("INFO", f"Initiating call for {full_name} (User ID: {user_id}, Job Title: {job_title}, Location: {location}, Pay: {pay}, Phone: {phone_number})")
+    
+    # UPDATE THIS DATA DICTIONARY - Add webhook URL
     data = {
         "phone_number": phone_number,
         "pathway_id": PATHWAY_ID,
@@ -268,6 +304,8 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
         "voice": "85a2c852-2238-4651-acf0-e5cbe02186f2",
         "wait_for_greeting": True,
         "noise_cancellation": True,
+        "webhook": "https://755b-103-241-232-74.ngrok-free.app/webhook",  # ADD THIS LINE
+        "record": True,  # ADD THIS LINE to enable recording
         "request_data": {
             "full_name": full_name,
             "job_title": job_title,
@@ -276,6 +314,8 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
             "user_name": full_name
         }
     }
+    
+    # Rest of the make_call function remains the same...
     try:
         session = requests.Session()
         retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
@@ -374,6 +414,12 @@ CALL #{i}
 if __name__ == "__main__":
     try:
         validate_env_variables()
+        
+        # START WEBHOOK SERVER IN BACKGROUND THREAD
+        webhook_thread = threading.Thread(target=run_webhook_server, daemon=True)
+        webhook_thread.start()
+        time.sleep(2)  # Wait for server to start
+        
         log_message("INFO", "Starting call scheduling process...")
         with get_db_connection() as conn:
             with get_db_cursor(conn) as cursor:
