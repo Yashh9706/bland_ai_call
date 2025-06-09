@@ -266,6 +266,8 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
         "pathway_id": PATHWAY_ID,
         "pronunciation_guide": {"$": "dollars"},
         "voice": "85a2c852-2238-4651-acf0-e5cbe02186f2",
+        "wait_for_greeting": True,
+        "noise_cancellation": True,
         "request_data": {
             "full_name": full_name,
             "job_title": job_title,
