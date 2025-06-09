@@ -78,6 +78,70 @@ def get_db_cursor(conn):
     finally:
         cur.close()
 
+def create_database_columns():
+    """Create the new columns in the database table if they don't exist."""
+    try:
+        with get_db_connection() as conn:
+            with get_db_cursor(conn) as cursor:
+                # Check if columns exist and create them if they don't
+                columns_to_add = [
+                    ("call_id", "VARCHAR(255)"),
+                    ("summary", "TEXT"),
+                    ("intent", "VARCHAR(50)")
+                ]
+                
+                for column_name, column_type in columns_to_add:
+                    try:
+                        # Check if column exists
+                        cursor.execute("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = %s AND column_name = %s
+                        """, (TABLE_NAME, column_name))
+                        
+                        if not cursor.fetchone():
+                            # Column doesn't exist, add it
+                            cursor.execute(f"ALTER TABLE {TABLE_NAME} ADD COLUMN {column_name} {column_type}")
+                            log_message("SUCCESS", f"Added column '{column_name}' to table '{TABLE_NAME}'")
+                        else:
+                            log_message("INFO", f"Column '{column_name}' already exists in table '{TABLE_NAME}'")
+                    except psycopg2.Error as e:
+                        log_message("ERROR", f"Error adding column '{column_name}': {str(e)}")
+                        raise
+                
+                conn.commit()
+                log_message("SUCCESS", "Database columns setup completed")
+                
+    except Exception as e:
+        log_message("ERROR", f"Failed to create database columns: {str(e)}")
+        raise
+
+def update_database_with_call_result(user_id, call_result):
+    """Update the database with call results for a specific user."""
+    try:
+        with get_db_connection() as conn:
+            with get_db_cursor(conn) as cursor:
+                # Update the record with call results
+                cursor.execute(f"""
+                    UPDATE {TABLE_NAME} 
+                    SET call_id = %s, summary = %s, intent = %s 
+                    WHERE id = %s
+                """, (
+                    call_result.get('call_id', 'N/A'),
+                    call_result.get('summary', 'No summary available'),
+                    call_result.get('call_intent', 'no'),
+                    user_id
+                ))
+                
+                if cursor.rowcount > 0:
+                    conn.commit()
+                    log_message("SUCCESS", f"Updated database record for user ID {user_id} with call results")
+                else:
+                    log_message("WARNING", f"No record found to update for user ID {user_id}")
+                    
+    except Exception as e:
+        log_message("ERROR", f"Failed to update database for user ID {user_id}: {str(e)}")
+
 def signal_handler(sig, frame):
     """Handles shutdown signals."""
     log_message("INFO", "Received shutdown signal, stopping scheduler...")
@@ -124,38 +188,81 @@ def run_webhook_server():
 def analyze_call_interest(call_id, full_name):
     """Analyzes call to determine intent using the provided API endpoint."""
     log_message("INFO", f"Starting intent analysis for {full_name} (Call ID: {call_id})")
-    try:
-        session = requests.Session()
-        retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
-        session.mount("https://", HTTPAdapter(max_retries=retries))
-        response = session.post(
-            f"https://api.bland.ai/v1/calls/{call_id}/analyze",
-            headers={"authorization": API_KEY, "Content-Type": "application/json"},
-            json={
-                "goal": "Determine caller's interest in job opportunity",
-                "questions": [
-                    ["Is the caller interested in taking a job (e.g., said ‘interested,’ ‘apply,’ asked about job details, or expressed intent to work)?", "string"]
-                ]
-            },
-            timeout=10
-        )
-        if response.status_code == 200 and response.json().get("answers"):
-            answer = response.json()["answers"][0].lower().strip()
-            call_intent = "no"
-            if answer == "yes":
-                call_intent = "yes"
-            elif answer == "callback_later":
-                call_intent = "later"
-            log_message("SUCCESS", f"Intent analysis for {full_name}: {call_intent}")
-            return {'call_intent': call_intent}
-        log_message("ERROR", f"Analysis failed for {full_name}: Invalid response")
-        return {'call_intent': "no"}
-    except requests.exceptions.RequestException as e:
-        log_message("ERROR", f"Error analyzing call for {full_name}: {str(e)}")
-        return {'call_intent': "no"}
-    except Exception as e:
-        log_message("ERROR", f"Unexpected error in intent analysis for {full_name}: {str(e)}")
-        return {'call_intent': "no"}
+    
+    max_retries = 3
+    base_timeout = 30  # Increased from 10 to 30 seconds
+    
+    for attempt in range(max_retries):
+        try:
+            session = requests.Session()
+            retries = Retry(
+                total=2, 
+                backoff_factor=2, 
+                status_forcelist=[429, 500, 502, 503, 504],
+                read=2,  # Add read retries
+                connect=2  # Add connection retries
+            )
+            session.mount("https://", HTTPAdapter(max_retries=retries))
+            
+            # Increase timeout progressively with each retry
+            current_timeout = base_timeout + (attempt * 15)
+            
+            log_message("INFO", f"Attempt {attempt + 1}/{max_retries} for {full_name} with {current_timeout}s timeout")
+            
+            response = session.post(
+                f"https://api.bland.ai/v1/calls/{call_id}/analyze",
+                headers={"authorization": API_KEY, "Content-Type": "application/json"},
+                json={
+                    "goal": "Analyze caller's response to job opportunity",
+                    "questions": [
+                        ["Based on the caller's response, categorize their interest: Answer 'yes' if genuinely interested in the job, 'no' if not interested/declined, or 'later' if they said they're busy/call later/call back later/will call you back", "string"]
+                    ]
+                },
+                timeout=current_timeout
+            )
+            
+            if response.status_code == 200 and response.json().get("answers"):
+                answer = response.json()["answers"][0].lower().strip()
+                call_intent = "no"  # Default to no
+                
+                if answer == "yes":
+                    call_intent = "yes"  # Genuinely interested
+                elif answer == "later":
+                    call_intent = "later"  # Busy/call later
+                elif answer == "no":
+                    call_intent = "no"  # Not interested
+                else:
+                    # Handle any unexpected responses
+                    log_message("WARNING", f"Unexpected analysis response for {full_name}: '{answer}', defaulting to 'no'")
+                    call_intent = "no"
+                    
+                log_message("SUCCESS", f"Intent analysis for {full_name}: {call_intent} (raw answer: '{answer}')")
+                return {'call_intent': call_intent}
+            else:
+                log_message("WARNING", f"Analysis attempt {attempt + 1} failed for {full_name}: Status {response.status_code}")
+                if attempt == max_retries - 1:  # Last attempt
+                    log_message("ERROR", f"Analysis failed for {full_name}: Invalid response after all retries")
+                    return {'call_intent': "no"}
+                
+        except requests.exceptions.Timeout as e:
+            log_message("WARNING", f"Timeout on attempt {attempt + 1} for {full_name}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                log_message("ERROR", f"Final timeout error analyzing call for {full_name}: {str(e)}")
+                return {'call_intent': "no"}
+            time.sleep(5)  # Wait before retry
+            
+        except requests.exceptions.RequestException as e:
+            log_message("WARNING", f"Request error on attempt {attempt + 1} for {full_name}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                log_message("ERROR", f"Final request error analyzing call for {full_name}: {str(e)}")
+                return {'call_intent': "no"}
+            time.sleep(3)  # Wait before retry
+            
+        except Exception as e:
+            log_message("ERROR", f"Unexpected error in intent analysis for {full_name}: {str(e)}")
+            return {'call_intent': "no"}
+    
+    return {'call_intent': "no"}
 
 def extract_first_url(url_string):
     """Extracts the first URL from a string."""
@@ -305,7 +412,6 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
         "wait_for_greeting": True,
         "noise_cancellation": True,
         "webhook": "https://755b-103-241-232-74.ngrok-free.app/webhook",  # ADD THIS LINE
-        "record": True,  # ADD THIS LINE to enable recording
         "request_data": {
             "full_name": full_name,
             "job_title": job_title,
@@ -315,7 +421,6 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
         }
     }
     
-    # Rest of the make_call function remains the same...
     try:
         session = requests.Session()
         retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
@@ -335,6 +440,10 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
                 call_result['user_id'] = user_id
                 results_list.append(call_result)
                 log_message("INFO", f"Added result for {full_name} to call_results: {call_result}")
+                
+                # Store call results in database
+                update_database_with_call_result(user_id, call_result)
+                
             return call_result
         return handle_api_error(full_name, None, response, 'failed')
     except requests.exceptions.RequestException as e:
@@ -344,6 +453,10 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
             error_result['user_id'] = user_id
             results_list.append(error_result)
             log_message("INFO", f"Added error result for {full_name} to call_results: {error_result}")
+            
+            # Store error result in database
+            update_database_with_call_result(user_id, error_result)
+            
         return error_result
     except Exception as e:
         log_message("ERROR", f"Unexpected error making call for {full_name}: {str(e)}")
@@ -352,6 +465,10 @@ def make_call(full_name, job_details, phone_number, results_list, user_id):
             error_result['user_id'] = user_id
             results_list.append(error_result)
             log_message("INFO", f"Added error result for {full_name} to call_results: {error_result}")
+            
+            # Store error result in database
+            update_database_with_call_result(user_id, error_result)
+            
         return error_result
 
 def schedule_call(user_id, full_name, job_details, phone_number, results_list):
@@ -414,6 +531,9 @@ CALL #{i}
 if __name__ == "__main__":
     try:
         validate_env_variables()
+        
+        # Create database columns if they don't exist
+        create_database_columns()
         
         # START WEBHOOK SERVER IN BACKGROUND THREAD
         webhook_thread = threading.Thread(target=run_webhook_server, daemon=True)
