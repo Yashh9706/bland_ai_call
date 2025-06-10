@@ -113,6 +113,26 @@ def analyze_call_intent(call_id):
     except Exception as e:
         print(f"Exception analyzing call: {e}")
         return "error"
+    
+def get_call_summary(call_id):
+    summary_url = f"{CALL_URL}/{call_id}"
+    headers = {
+        "Authorization": f"Bearer {BLAND_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    try:
+        response = requests.get(summary_url, headers=headers)
+        if response.status_code == 200:
+            result = response.json()
+            summary = result.get("summary", "No summary available.")
+            return summary
+        else:
+            print(f"API error while fetching summary: {response.status_code} {response.text}")
+            return "Error fetching summary."
+    except Exception as e:
+        print(f"Exception while getting summary: {e}")
+        return "Error fetching summary."
+
 
 def make_calls(person_data):
     try:
@@ -143,6 +163,7 @@ def make_calls(person_data):
 
         print(f"Calling {phone_number} for {person_data.get('full_name', 'Unknown')}")
         response = requests.post(CALL_URL, json=payload, headers=headers)
+        print(response.json())
         if response.status_code == 200:
             print(f"Call initiated for {person_data.get('full_name', 'Unknown')}")
         else:
@@ -159,7 +180,7 @@ async def initiate_calls(user_input: UserInput):
 
         now = datetime.now()
         for i, person in enumerate(all_persons):
-            run_time = now + timedelta(minutes=1, seconds=i * 5)
+            run_time = now + timedelta(minutes=0, seconds=i * 5)
             job_id = f"call_{person['id']}_{int(run_time.timestamp())}"
             scheduler.add_job(make_calls, 'date', run_date=run_time, args=[person], id=job_id)
             print(f"Scheduled call for {person.get('full_name', 'Unknown')} at {run_time}")
@@ -178,27 +199,35 @@ async def webhook(request: Request):
         print("Webhook received")
         print(f"Status: {data.get('status', 'Unknown')}")
         print(f"Call ID: {call_id}")
-        # print(f"Duration: {data.get('call_length', 'Unknown')} seconds")
         print(f"Phone Number: {phone_number}")
         print("-" * 50)
 
         if call_id:
             intent = analyze_call_intent(call_id)
+            summary = get_call_summary(call_id)
             print("Call Analysis Complete")
             print(f"Intent: {intent.upper()}")
+            print(f"Summary: {summary}")
             print("-" * 50)
             return {
                 "message": "Webhook processed successfully",
                 "call_id": call_id,
                 "phone_number": phone_number,
-                "intent": intent
+                "intent": intent,
+                "summary": summary
             }
         else:
             print("No call_id in webhook data")
-            return {"message": "No call_id found", "intent": "unknown"}
+            return {"message": "No call_id found", "intent": "unknown", "summary": None}
     except Exception as e:
         print(f"Webhook processing error: {e}")
-        return {"message": "Error processing webhook", "error": str(e), "intent": "error"}
+        return {
+            "message": "Error processing webhook",
+            "error": str(e),
+            "intent": "error",
+            "summary": None
+        }
+
 
 if __name__ == "__main__":
     import uvicorn
