@@ -1,9 +1,8 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.events import EVENT_JOB_MISSED
 from psycopg2.extras import RealDictCursor
 import psycopg2
 import requests
@@ -19,34 +18,15 @@ WEBHOOK_URL = "https://aca7-182-70-119-161.ngrok-free.app/webhook"
 # Scheduler setup
 jobstores = {'default': SQLAlchemyJobStore(url=DATABASE_URL)}
 scheduler = BackgroundScheduler(jobstores=jobstores, job_defaults={'misfire_grace_time': 30})
-
-
-def missed_job_listener(event):
-    try:
-        missed_job = scheduler.get_job(event.job_id)
-        if missed_job:
-            scheduler.add_job(
-                missed_job.func,
-                'date',
-                run_date=datetime.now() + timedelta(seconds=5),
-                args=missed_job.args,
-                id=f"retry_{event.job_id}_{int(datetime.now().timestamp())}"
-            )
-    except Exception as e:
-        logging.error(f"Error scheduling retry: {e}")
-
-
-scheduler.add_listener(missed_job_listener, EVENT_JOB_MISSED)
 scheduler.start()
 
-
+# Database connection helpers
 def get_database_connection():
     try:
         return psycopg2.connect(DATABASE_URL)
     except Exception as e:
         logging.error(f"Database connection error: {e}")
         return None
-
 
 def execute_update(query, params):
     conn = get_database_connection()
@@ -65,13 +45,12 @@ def execute_update(query, params):
         cursor.close()
         conn.close()
 
-
+# DB update functions
 def store_call_id(phone_number, user_id, call_id):
     return execute_update(
         "UPDATE person_details_dummy SET call_id = %s WHERE sms_phone_numbers_used = %s AND id = %s",
         (call_id, phone_number, user_id)
     )
-
 
 def store_intent_and_summary(call_id, intent, summary):
     return execute_update(
@@ -79,7 +58,7 @@ def store_intent_and_summary(call_id, intent, summary):
         (intent, summary, call_id)
     )
 
-
+# Fetch person data
 def fetch_all_person_data():
     conn = get_database_connection()
     if not conn:
@@ -101,7 +80,7 @@ def fetch_all_person_data():
         cursor.close()
         conn.close()
 
-
+# Call analysis
 def analyze_call_intent(call_id):
     try:
         response = requests.post(
@@ -127,7 +106,7 @@ def analyze_call_intent(call_id):
         logging.error(f"Exception analyzing call: {e}")
         return "error"
 
-
+# Get call summary
 def get_call_summary(call_id):
     try:
         response = requests.get(
@@ -139,7 +118,7 @@ def get_call_summary(call_id):
         logging.error(f"Exception while getting summary: {e}")
         return "Error fetching summary."
 
-
+# Make individual call
 def make_calls(person):
     try:
         phone_number = person['sms_phone_numbers_used'].strip()
@@ -174,7 +153,7 @@ def make_calls(person):
     except Exception as e:
         logging.error(f"Error making call: {e}")
 
-
+# Endpoint to initiate all calls concurrently
 @app.post("/initiate-calls", response_model=dict)
 async def initiate_calls():
     try:
@@ -182,21 +161,21 @@ async def initiate_calls():
         if not people:
             return {"message": "No person details found in database"}
 
-        now = datetime.now()
-        for i, person in enumerate(people):
+        for person in people:
             scheduler.add_job(
                 make_calls,
-                'date',
-                run_date=now + timedelta(seconds=i * 5),
+                trigger='date',
+                run_date=datetime.now(),  # Immediate execution
                 args=[person],
-                id=f"call_{person['id']}_{int(now.timestamp()) + i * 5}"
+                id=f"call_{person['id']}_{int(datetime.now().timestamp())}"
             )
-        return {"message": "Calls initiated successfully"}
+
+        return {"message": f"{len(people)} calls initiated concurrently"}
     except Exception as e:
         logging.error(f"Error in initiate_calls: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-
+# Webhook endpoint to process individual call responses
 @app.post("/webhook")
 async def webhook(request: Request):
     try:
@@ -224,7 +203,7 @@ async def webhook(request: Request):
             "summary": None
         }
 
-
+# Main app runner
 if __name__ == "__main__":
     import uvicorn
     logging.basicConfig(
