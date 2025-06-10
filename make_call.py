@@ -1,49 +1,60 @@
 import asyncio
 import logging
-from fastapi import FastAPI, HTTPException
-import requests
+from datetime import datetime, timedelta
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from datetime import datetime, timedelta
-from pydantic import BaseModel
+from apscheduler.events import EVENT_JOB_MISSED
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import requests
 import json
 
 app = FastAPI()
 
 DATABASE_URL = 'postgresql://neondb_owner:npg_eWph9LyzAki7@ep-winter-sea-a6tcb5f1.us-west-2.aws.neon.tech/neondb?sslmode=require'
+BLAND_API_KEY = "org_0301c6c09e6f2613b52b17fb221b1b211abaa4e88525251a05982c0ccc8c494fa529dbc5e54dcae8ef0869"
+PATHWAY_ID = "2bd6bfcc-1d5a-4129-b150-5ab9cab0ac2e"
+CALL_URL = "https://api.bland.ai/v1/calls"
 
-jobstores = {
-    'default': SQLAlchemyJobStore(url=DATABASE_URL)
-}
+jobstores = {'default': SQLAlchemyJobStore(url=DATABASE_URL)}
+job_defaults = {'misfire_grace_time': 30}
+scheduler = BackgroundScheduler(jobstores=jobstores, job_defaults=job_defaults)
 
-scheduler = BackgroundScheduler(jobstores=jobstores)
+def missed_job_listener(event):
+    print(f"Job {event.job_id} was missed. Retrying in 5 seconds...")
+    try:
+        missed_job = scheduler.get_job(event.job_id)
+        if missed_job:
+            retry_job_id = f"retry_{event.job_id}_{int(datetime.now().timestamp())}"
+            scheduler.add_job(
+                missed_job.func,
+                'date',
+                run_date=datetime.now() + timedelta(seconds=5),
+                args=missed_job.args,
+                id=retry_job_id
+            )
+    except Exception as e:
+        print(f"Error scheduling retry: {e}")
+
+scheduler.add_listener(missed_job_listener, EVENT_JOB_MISSED)
 scheduler.start()
 
 class UserInput(BaseModel):
     phone_number: str
 
-BLAND_API_KEY = "org_0301c6c09e6f2613b52b17fb221b1b211abaa4e88525251a05982c0ccc8c494fa529dbc5e54dcae8ef0869"
-PATHWAY_ID = "2bd6bfcc-1d5a-4129-b150-5ab9cab0ac2e"
-
-url_base = "https://api.bland.ai/v1/calls"
-
 def get_database_connection():
-    """Create and return a database connection"""
     try:
-        conn = psycopg2.connect(DATABASE_URL)
-        return conn
+        return psycopg2.connect(DATABASE_URL)
     except Exception as e:
         print(f"Database connection error: {e}")
         return None
 
 def fetch_all_person_data():
-    """Fetch all person details with their job data"""
     conn = get_database_connection()
     if not conn:
         return []
-    
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         query = """
@@ -51,13 +62,13 @@ def fetch_all_person_data():
             pd.id,
             pd.full_name,
             pd.url,
-            pd.sms_phone_number,
+            pd.sms_phone_numbers_used,
             jd.job_title,
             jd.location,
             jd.estimated_pay
         FROM person_details_dummy pd
         LEFT JOIN uniti_med_job_data jd ON pd.url = jd.url
-        WHERE pd.sms_phone_number IS NOT NULL AND pd.sms_phone_number != ''
+        WHERE pd.sms_phone_numbers_used IS NOT NULL AND pd.sms_phone_numbers_used != ''
         """
         cursor.execute(query)
         results = cursor.fetchall()
@@ -66,163 +77,128 @@ def fetch_all_person_data():
         return results
     except Exception as e:
         print(f"Error fetching data: {e}")
-        if conn:
-            conn.close()
+        conn.close()
         return []
 
-def make_calls(person_data):
-    """Make a call using Bland AI API with database data"""
-    # Clean phone number
-    phone_number = person_data['sms_phone_number'].strip()
-    
-    # Extract pay amount from database
-    pay_amount = None
-    if person_data.get('estimated_pay'):
-        try:
-            import re
-            pay_str = str(person_data['estimated_pay']).replace('$', '').replace(',', '')
-        except Exception as e:
-            print(f"Error processing estimated_pay: {e}")
-            pay_str = None
-
+def analyze_call_intent(call_id):
+    analyze_url = f"{CALL_URL}/{call_id}/analyze"
     data = {
-        "phone_number": phone_number,
-        "pathway_id": PATHWAY_ID,
-        "pronunciation_guide": {"$": "dollars"},
-        "voice": "85a2c852-2238-4651-acf0-e5cbe02186f2",
-        "wait_for_greeting": True,
-        "noise_cancellation": True,
-        "webhook": "https://aca7-182-70-119-161.ngrok-free.app/webhook",
-        "request_data": {
-            "full_name": person_data.get('full_name'),
-            "job_title": person_data.get('job_title'),
-            "location": person_data.get('location'),
-            "pay": pay_amount,
-            "user_name": person_data.get('id')
-        }
+        "goal": "Analyze caller's response to job opportunity",
+        "questions": [
+            [
+                "Based on the caller's response, categorize their interest: Answer 'yes' if genuinely interested in the job, 'no' if not interested/declined, or 'later' if they said they're busy/call later/call back later/will call you back",
+                "string"
+            ]
+        ]
     }
-
     headers = {
         "Authorization": f"Bearer {BLAND_API_KEY}",
         "Content-Type": "application/json"
     }
-
     try:
-        print(f"Making call to {phone_number} for {person_data.get('full_name', 'Unknown')}")
-        response = requests.post(url_base, json=data, headers=headers)
-        
+        response = requests.post(analyze_url, json=data, headers=headers)
         if response.status_code == 200:
-            print(f"Call initiated successfully for {person_data.get('full_name', 'Unknown')}")
+            result = response.json()
+            answer = result.get('answers', [None])[0]
+            if isinstance(answer, dict):
+                intent = answer.get('answer', '').strip().lower()
+            elif isinstance(answer, str):
+                intent = answer.strip().lower()
+            else:
+                intent = "unknown"
+            return intent if intent in ["yes", "no", "later"] else "unknown"
+        else:
+            print(f"API error: {response.status_code} {response.text}")
+            return "error"
+    except Exception as e:
+        print(f"Exception analyzing call: {e}")
+        return "error"
+
+def make_calls(person_data):
+    try:
+        phone_number = person_data['sms_phone_numbers_used'].strip()
+        pay_amount = str(person_data.get('estimated_pay', '')).replace('$', '').replace(',', '')
+
+        payload = {
+            "phone_number": phone_number,
+            "pathway_id": PATHWAY_ID,
+            "pronunciation_guide": {"$": "dollars"},
+            "voice": "85a2c852-2238-4651-acf0-e5cbe02186f2",
+            "wait_for_greeting": True,
+            "noise_cancellation": True,
+            "webhook": "https://aca7-182-70-119-161.ngrok-free.app/webhook",
+            "request_data": {
+                "full_name": person_data.get('full_name'),
+                "job_title": person_data.get('job_title'),
+                "location": person_data.get('location'),
+                "pay": pay_amount,
+                "user_name": person_data.get('id')
+            }
+        }
+
+        headers = {
+            "Authorization": f"Bearer {BLAND_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        print(f"Calling {phone_number} for {person_data.get('full_name', 'Unknown')}")
+        response = requests.post(CALL_URL, json=payload, headers=headers)
+        if response.status_code == 200:
+            print(f"Call initiated for {person_data.get('full_name', 'Unknown')}")
         else:
             print(f"Failed to initiate call for {person_data.get('full_name', 'Unknown')}")
-            print(f"Status code: {response.status_code}")
-            
     except Exception as e:
         print(f"Error making call for {person_data.get('full_name', 'Unknown')}: {e}")
 
 @app.post("/initiate-calls", response_model=dict)
 async def initiate_calls(user_input: UserInput):
-    """Fetch all data from database and schedule calls for everyone"""
     try:
-        # Fetch all person data with job details
         all_persons = fetch_all_person_data()
-        
         if not all_persons:
             return {"message": "No person details found in database"}
-        
-        current_time = datetime.now()
-        
-        # Schedule calls for all persons
+
+        now = datetime.now()
         for i, person in enumerate(all_persons):
-            # Schedule each call 1 minute from now with 5-second intervals
-            run_time = current_time + timedelta(minutes=1, seconds=i*5)
+            run_time = now + timedelta(minutes=1, seconds=i * 5)
             job_id = f"call_{person['id']}_{int(run_time.timestamp())}"
-            
-            scheduler.add_job(
-                make_calls, 
-                'date', 
-                run_date=run_time, 
-                args=[person], 
-                id=job_id
-            )
-            
+            scheduler.add_job(make_calls, 'date', run_date=run_time, args=[person], id=job_id)
             print(f"Scheduled call for {person.get('full_name', 'Unknown')} at {run_time}")
-        
         return {"message": "Calls initiated successfully"}
-        
     except Exception as e:
         print(f"Error in initiate_calls: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.post("/webhook")
-async def webhook(request: dict):
-    print("="*50)
-    print("🔔 WEBHOOK RECEIVED - CALL ENDED!")
-    print("="*50)
-    print(f"Call Status: {request.get('status', 'Unknown')}")
-    print(f"Call ID: {request.get('call_id', 'Unknown')}")
-    print(f"Duration: {request.get('call_length', 'Unknown')} seconds")
-    print(f"Phone Number: {request.get('to', 'Unknown')}")
-    print(f"From Number: {request.get('from', 'Unknown')}")
-    print("Full webhook data:")
-    print(json.dumps(request, indent=2))
-    print("="*50)
-    # Process the webhook data
-    return {"message": "Webhook received successfully"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
-
-@app.post("/initiate-calls", response_model=dict)
-async def initiate_calls(user_input: UserInput):
-    """Fetch all data from database and schedule calls for everyone"""
+async def webhook(request: Request):
     try:
-        # Fetch all person data with job details
-        all_persons = fetch_all_person_data()
-        
-        if not all_persons:
-            return {"message": "No person details found in database"}
-        
-        current_time = datetime.now()
-        
-        # Schedule calls for all persons
-        for i, person in enumerate(all_persons):
-            # Schedule each call 1 minute from now with 5-second intervals
-            run_time = current_time + timedelta(minutes=1, seconds=i*5)
-            job_id = f"call_{person['id']}_{int(run_time.timestamp())}"
-            
-            scheduler.add_job(
-                make_calls, 
-                'date', 
-                run_date=run_time, 
-                args=[person], 
-                id=job_id
-            )
-            
-            print(f"Scheduled call for {person.get('full_name', 'Unknown')} at {run_time}")
-        
-        return {"message": "Calls initiated successfully"}
-        
-    except Exception as e:
-        print(f"Error in initiate_calls: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        data = await request.json()
+        call_id = data.get('call_id')
+        phone_number = data.get('to', 'Unknown')
+        print("-" * 50)
+        print("Webhook received")
+        print(f"Status: {data.get('status', 'Unknown')}")
+        print(f"Call ID: {call_id}")
+        # print(f"Duration: {data.get('call_length', 'Unknown')} seconds")
+        print(f"Phone Number: {phone_number}")
+        print("-" * 50)
 
-@app.post("/webhook")
-async def webhook(request: dict):
-    print("="*50)
-    print("🔔 WEBHOOK RECEIVED - CALL ENDED!")
-    print("="*50)
-    print(f"Call Status: {request.get('status', 'Unknown')}")
-    print(f"Call ID: {request.get('call_id', 'Unknown')}")
-    print(f"Duration: {request.get('call_length', 'Unknown')} seconds")
-    print(f"Phone Number: {request.get('to', 'Unknown')}")
-    print(f"From Number: {request.get('from', 'Unknown')}")
-    print("Full webhook data:")
-    print(json.dumps(request, indent=2))
-    print("="*50)
-    # Process the webhook data
-    return {"message": "Webhook received successfully"}
+        if call_id:
+            intent = analyze_call_intent(call_id)
+            print("Call Analysis Complete")
+            print(f"Intent: {intent.upper()}")
+            print("-" * 50)
+            return {
+                "message": "Webhook processed successfully",
+                "call_id": call_id,
+                "phone_number": phone_number,
+                "intent": intent
+            }
+        else:
+            print("No call_id in webhook data")
+            return {"message": "No call_id found", "intent": "unknown"}
+    except Exception as e:
+        print(f"Webhook processing error: {e}")
+        return {"message": "Error processing webhook", "error": str(e), "intent": "error"}
 
 if __name__ == "__main__":
     import uvicorn
