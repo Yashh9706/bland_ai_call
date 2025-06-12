@@ -5,7 +5,7 @@ from functools import wraps
 from fastapi import FastAPI, HTTPException, Request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.events import EVENT_JOB_ERROR
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 from psycopg2.extras import RealDictCursor
 import psycopg2
 import requests
@@ -44,25 +44,16 @@ def create_scheduler():
     try:
         jobstores = {
             'default': SQLAlchemyJobStore(
-                url=DATABASE_URL,
-                engine_options={
-                    'pool_pre_ping': True,  # Enable connection health checks
-                    'pool_recycle': 3600,   # Recycle connections after 1 hour
-                    'pool_timeout': 30,     # Wait up to 30 seconds for a connection
-                    'connect_args': {
-                        'connect_timeout': 10  # PostgreSQL connection timeout
-                    }
-                }
+                url=DATABASE_URL
             )
         }
         scheduler = BackgroundScheduler(
             jobstores=jobstores,
             job_defaults={
-                'misfire_grace_time': 30,
-                'coalesce': True,  # Combine missed executions
-                'max_instances': 1  # Prevent concurrent executions of same job
-            },
-            timezone='UTC'
+                'misfire_grace_time': None,  # Run even if missed
+                'coalesce': True,
+                'max_instances': 1
+            }
         )
         
         # Add error listener
@@ -71,9 +62,17 @@ def create_scheduler():
                 logging.error(f"Job failed: {event.job_id}")
                 logging.error(f"Error: {str(event.exception)}", exc_info=event.exception)
                 
+        def job_executed_listener(event):
+            logging.info(f"Job executed: {event.job_id} at {datetime.now()}")
+                
         scheduler.add_listener(job_error_listener, EVENT_JOB_ERROR)
+        scheduler.add_listener(job_executed_listener, EVENT_JOB_EXECUTED)
+        
+        # Print all current jobs
+        scheduler.print_jobs()
+        
         scheduler.start()
-        logging.info("Scheduler started successfully")
+        logging.info(f"Scheduler started successfully at {datetime.now()}")
         return scheduler
     except Exception as e:
         logging.error(f"Failed to create scheduler: {e}")
@@ -152,18 +151,22 @@ def fetch_all_person_data():
         cursor.execute("""
             WITH available_people AS (
                 SELECT pd.id, pd.full_name, pd.sms_phone_numbers_used,
-                       jd.job_title, jd.location, jd.estimated_pay,
-                       pd.call_id, pd.call_scheduled_at
+                    jd.job_title, jd.location, jd.estimated_pay,
+                    pd.call_id, pd.call_scheduled_at
                 FROM person_details_dummy pd
                 LEFT JOIN uniti_med_job_data jd ON pd.url = jd.url
                 WHERE pd.sms_phone_numbers_used IS NOT NULL 
                 AND pd.sms_phone_numbers_used != ''
+                AND NOT pd.job_id::text ~ '^\\s*\\S+\\s*$'  -- Only include records where job_id is completely blank
             )
             SELECT * FROM available_people
-            WHERE call_id IS NULL  -- Include fresh records that haven't been called
-            OR (call_id IS NOT NULL AND call_scheduled_at IS NULL)  -- Include failed immediate calls
-            OR (call_scheduled_at IS NOT NULL AND call_scheduled_at <= NOW())  -- Include rescheduled calls whose time has come
+            WHERE (
+                NOT call_id::text ~ '^\\s*\\S+\\s*$'  -- Check if call_id is completely blank
+                OR (call_id IS NOT NULL AND TRIM(call_id) != '' AND call_scheduled_at IS NULL)
+                OR (call_scheduled_at IS NOT NULL AND call_scheduled_at <= NOW())
+            )
         """)
+
         results = cursor.fetchall()
         
         # Add detailed logging
@@ -288,47 +291,61 @@ def make_calls(person):
             )
             update_call_schedule_time(person['id'], next_time)
             logging.info(f"24-hour limit reached (2000 calls). Rescheduling call for {person['id']} to {next_time}")
-            return
+            return False
 
         phone_number = person['sms_phone_numbers_used'].strip()
         pay = str(person.get('estimated_pay', '')).replace('$', '').replace(',', '')
             
-        logging.info(f"Attempting to make call to {phone_number}")
-        response = requests.post(
-            CALL_URL,
-            json={
-                "phone_number": phone_number,
-                "pathway_id": PATHWAY_ID,
-                "pronunciation_guide": {"$": "dollars"},
-                "voice": "85a2c852-2238-4651-acf0-e5cbe02186f2",
-                "wait_for_greeting": True,
-                "noise_cancellation": True,
-                "webhook": WEBHOOK_URL,
-                "request_data": {
-                    "full_name": person.get('full_name'),
-                    "job_title": person.get('job_title'),
-                    "location": person.get('location'),
-                    "pay": pay,
-                    "user_name": person.get('id')
-                }
-            },
-            headers={
-                "Authorization": f"Bearer {BLAND_API_KEY}",
-                "Content-Type": "application/json"
-            }
-        )
-        if response.status_code == 200:
-            call_id = response.json().get('call_id')
-            if call_id:
-                store_call_id(phone_number, person.get('id'), call_id)
-                # No call_scheduled_at update for immediate calls - we leave it NULL
+        logging.info(f"Making call to {phone_number} at {current_time}")
+        try:
+            response = requests.post(
+                CALL_URL,
+                json={
+                    "phone_number": phone_number,
+                    "pathway_id": PATHWAY_ID,
+                    "pronunciation_guide": {"$": "dollars"},
+                    "voice": "85a2c852-2238-4651-acf0-e5cbe02186f2",
+                    "wait_for_greeting": True,
+                    "noise_cancellation": True,
+                    "webhook": WEBHOOK_URL,
+                    "request_data": {
+                        "full_name": person.get('full_name'),
+                        "job_title": person.get('job_title'),
+                        "location": person.get('location'),
+                        "pay": pay,
+                        "user_name": person.get('id')
+                    }
+                },
+                headers={
+                    "Authorization": f"Bearer {BLAND_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                timeout=30  # Add timeout to prevent hanging
+            )
+            response.raise_for_status()  # Raise an exception for bad status codes
+            
+            if response.status_code == 200:
+                call_id = response.json().get('call_id')
+                if call_id:
+                    store_call_id(phone_number, person.get('id'), call_id)
+                    logging.info(f"Successfully initiated call for {person.get('id')} with call_id: {call_id}")
+                    return True
+                else:
+                    logging.error("Call API returned 200 but no call_id in response")
+                    return False
             else:
-                logging.error("Call API returned 200 but no call_id in response")
-        else:
-            logging.error(f"Call API error. Status: {response.status_code}, Response: {response.text}")
+                logging.error(f"Call API error. Status: {response.status_code}, Response: {response.text}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logging.error(f"API request failed: {str(e)}")
+            return False
+            
     except Exception as e:
         logging.error(f"Error making call: {str(e)}", exc_info=True)
-
+        return False
+    
+    return True
 # Endpoint to initiate all calls concurrently
 @app.post("/initiate-calls", response_model=dict)
 async def initiate_calls():
@@ -341,26 +358,37 @@ async def initiate_calls():
         total_scheduled = 0
         current_time = datetime.now()
         
-        # Make immediate calls for each person
+        # Schedule calls for each person with 1 minute delay
         for person in people:
             call_count = get_24h_call_count()
             if call_count >= 2000:
                 # If we hit the limit, schedule for next day
                 next_time = current_time + timedelta(days=1)
-                job_id = f"call_{person['id']}_{int(next_time.timestamp())}"
-                scheduler.add_job(
-                    make_calls,
-                    trigger='date',
-                    run_date=next_time,
-                    args=[person],
-                    id=job_id
-                )
-                update_call_schedule_time(person['id'], next_time)
-                schedule_str = next_time.strftime("%Y-%m-%d %H:%M:%S")
             else:
-                # Make immediate call
-                make_calls(person)
-                schedule_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
+                # Schedule call for 1 minute later
+                next_time = current_time + timedelta(minutes=1)
+            
+            job_id = f"call_{person['id']}_{int(next_time.timestamp())}"
+            
+            # Remove any existing job with the same ID
+            if job_id in scheduler.get_jobs():
+                scheduler.remove_job(job_id)
+            
+            # Schedule the new job
+            job = scheduler.add_job(
+                make_calls,
+                trigger='date',
+                run_date=next_time,
+                args=[person],
+                id=job_id,
+                replace_existing=True
+            )
+            
+            logging.info(f"Scheduled job {job_id} for {next_time}")
+            
+            # Update the database with the scheduled time
+            update_call_schedule_time(person['id'], next_time)
+            schedule_str = next_time.strftime("%Y-%m-%d %H:%M:%S")
             
             # Track counts
             scheduled_counts[schedule_str] = scheduled_counts.get(schedule_str, 0) + 1
@@ -369,6 +397,10 @@ async def initiate_calls():
             # Add small delay between schedules to spread out the load
             current_time = current_time + timedelta(seconds=1)
 
+        # Log all scheduled jobs
+        logging.info("Currently scheduled jobs:")
+        scheduler.print_jobs()
+        
         # Prepare response message
         response_messages = [
             f"{count} calls scheduled for {slot_time}"
@@ -377,7 +409,8 @@ async def initiate_calls():
 
         return {
             "message": " and ".join(response_messages),
-            "total_scheduled": total_scheduled
+            "total_scheduled": total_scheduled,
+            "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
     except Exception as e:
         logging.error(f"Error in initiate_calls: {e}")
