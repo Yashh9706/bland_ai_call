@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -13,7 +13,7 @@ DATABASE_URL = 'postgresql://neondb_owner:npg_eWph9LyzAki7@ep-winter-sea-a6tcb5f
 BLAND_API_KEY = "org_0301c6c09e6f2613b52b17fb221b1b211abaa4e88525251a05982c0ccc8c494fa529dbc5e54dcae8ef0869"
 PATHWAY_ID = "2bd6bfcc-1d5a-4129-b150-5ab9cab0ac2e"
 CALL_URL = "https://api.bland.ai/v1/calls"
-WEBHOOK_URL = "https://aca7-182-70-119-161.ngrok-free.app/webhook"
+WEBHOOK_URL = "https://2923-182-70-119-161.ngrok-free.app/webhook"
 
 # Scheduler setup
 jobstores = {'default': SQLAlchemyJobStore(url=DATABASE_URL)}
@@ -165,15 +165,16 @@ async def initiate_calls():
             scheduler.add_job(
                 make_calls,
                 trigger='date',
-                run_date=datetime.now(),  # Immediate execution
+                run_date=datetime.now() + timedelta(minutes=1),  # Delayed by 1 minute
                 args=[person],
                 id=f"call_{person['id']}_{int(datetime.now().timestamp())}"
             )
 
-        return {"message": f"{len(people)} calls initiated concurrently"}
+        return {"message": f"{len(people)} calls scheduled to start in 1 minute"}
     except Exception as e:
         logging.error(f"Error in initiate_calls: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 
 # Webhook endpoint to process individual call responses
 @app.post("/webhook")
