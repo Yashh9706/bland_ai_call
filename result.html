@@ -137,6 +137,56 @@
             margin: 40px 0 18px 0;
             letter-spacing: 0.2px;
         }
+        .summary-cell {
+            max-width: 420px;
+            min-width: 180px;
+            max-height: 120px;
+            overflow-y: auto;
+            white-space: pre-line;
+            background: #f5f7fa;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 15px;
+            color: #333;
+            box-shadow: 0 1px 4px #2196f320;
+            line-height: 1.5;
+            transition: box-shadow 0.2s;
+        }
+        .summary-cell:hover {
+            box-shadow: 0 4px 16px #2196f340;
+        }
+        .responsive-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            background: #f8fafd;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px #2196f320;
+            overflow: hidden;
+        }
+        .responsive-table th, .responsive-table td {
+            padding: 12px 14px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 16px;
+        }
+        .responsive-table th {
+            background: #2196F3;           /* Solid blue */
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            border-bottom: 2px solid #1976D2;
+            border-right: 1px solid #1976D2; /* Subtle column separation */
+        }
+        .responsive-table th:last-child {
+            border-right: none;
+        }
+        .responsive-table tr:nth-child(even) td {
+            background: #f3f6fa;
+        }
+        .responsive-table tr:hover td {
+            background: #e3f2fd;
+        }
         @media (max-width: 900px) {
             .container { padding: 24px 4vw; }
             .result-card { padding: 18px 2vw; }
@@ -148,6 +198,8 @@
                 padding: 12px 2vw;
             }
             .result-field.summary { grid-column: 1 / 2; }
+            .responsive-table th, .responsive-table td { font-size: 14px; padding: 8px 6px; }
+            .summary-cell { max-width: 98vw; }
         }
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -186,14 +238,17 @@
             if (results.length === 0) {
                 resultDiv.innerHTML = '<div class="error">No extraction results found.</div>';
             } else {
-                // Define preferred columns and mapping
+                // Preferred columns and display labels
                 const preferredColumns = [
                     "full_name",
                     "phone_number",
                     "job_title",
-                    "location"
+                    "location",
+                    "email",
+                    "linkedin",
+                    "total_work_experience",
+                    "summary"
                 ];
-                // Map for display labels
                 const displayLabels = {
                     full_name: "Full Name",
                     phone_number: "Phone Number",
@@ -229,11 +284,18 @@
                 const csvBlob = new Blob([csvContent], { type: 'text/csv' });
                 const csvUrl = URL.createObjectURL(csvBlob);
 
-                // Show CSV as a table
-                let csvTable = '<div style="overflow-x:auto;margin-bottom:24px;"><table style="border-collapse:collapse;width:100%;background:#f8fafd;border-radius:8px;box-shadow:0 2px 8px #2196f320;">';
-                csvTable += '<tr>' + columns.map(col => `<th style="padding:8px 12px;background:#2196F3;color:#fff;text-align:left;">${displayLabels[col] || col.replace(/_/g, ' ')}</th>`).join('') + '</tr>';
+                // Show CSV as a table with improved summary formatting
+                let csvTable = '<div style="overflow-x:auto;margin-bottom:24px;"><table class="responsive-table">';
+                csvTable += '<tr>' + columns.map(col => `<th>${displayLabels[col] || col.replace(/_/g, ' ')}</th>`).join('') + '</tr>';
                 results.forEach(r => {
-                    csvTable += '<tr>' + columns.map(col => `<td style="padding:8px 12px;border-bottom:1px solid #e3e3e3;">${(r.content && r.content[col]) ? r.content[col] : ''}</td>`).join('') + '</tr>';
+                    csvTable += '<tr>' + columns.map(col => {
+                        let val = (r.content && r.content[col]) ? r.content[col] : '';
+                        if (col === 'summary' && val) {
+                            // Format summary: keep line breaks, limit height, scrollable
+                            return `<td class="summary-cell">${val.replace(/\n/g, '<br>')}</td>`;
+                        }
+                        return `<td>${val}</td>`;
+                    }).join('') + '</tr>';
                 });
                 csvTable += '</table></div>';
 

@@ -94,11 +94,11 @@ class MultiProcessResponse(BaseModel):
 def extract_json_from_content(content: str) -> Dict[str, Any]:
     """Extract JSON object from content string that might contain markdown code blocks."""
     logger.info("Extracting JSON from content")
-    
+
     # Try to find JSON content in markdown code blocks first
     json_pattern = r"```(?:json)?\s*([\s\S]*?)```"
     matches = re.findall(json_pattern, content)
-    
+
     if matches:
         logger.info(f"Found {len(matches)} potential JSON blocks in markdown")
         try:
@@ -108,18 +108,18 @@ def extract_json_from_content(content: str) -> Dict[str, Any]:
             return result
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse JSON from markdown block: {e}")
-    
+
     # If no JSON blocks or they weren't valid, try to parse the entire content
     try:
         logger.info("Attempting to parse entire content as JSON")
         return json.loads(content)
     except json.JSONDecodeError as e:
         logger.warning(f"Failed to parse entire content as JSON: {e}")
-        
+
         # If all fails, return the original content wrapped in a dict
         logger.info("Returning raw content wrapped in dictionary")
         return {"raw_content": content}
-    
+
 def upsert_to_postgres(data: dict, table_name="person_details_CV"):
     import os
     import psycopg2
@@ -185,7 +185,7 @@ def upsert_to_postgres(data: dict, table_name="person_details_CV"):
 def process_pdf(pdf_path):
     logger.info(f"Processing PDF: {pdf_path}")
     start_time = time.time()
-    
+
     try:
         # Open the PDF
         pdf_document = fitz.open(pdf_path)
@@ -196,13 +196,13 @@ def process_pdf(pdf_path):
         # Process pages
         page_count = len(pdf_document)
         logger.info(f"Processing {page_count} pages")
-        
+
         all_page_images = []
         for page_num in range(page_count):
             page = pdf_document[page_num]
             pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
             base64_image = base64.b64encode(pix.tobytes()).decode("utf-8")
-            
+
             all_page_images.append({
                 "type": "image_url",
                 "image_url": {
@@ -210,7 +210,7 @@ def process_pdf(pdf_path):
                     "detail": "auto"
                 }
             })
-            
+
             # Log progress for every 5 pages or the last page
             if page_num % 5 == 0 or page_num == page_count - 1:
                 logger.info(f"Processed page {page_num + 1}/{page_count}")
@@ -221,14 +221,14 @@ def process_pdf(pdf_path):
         # Create message and send to LLM
         logger.info("Sending request to OpenAI API")
         api_start_time = time.time()
-        
+
         messages = [
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=all_page_images)
         ]
-        
+
         response = llm.invoke(messages, timeout=120)
-        
+
         api_duration = time.time() - api_start_time
         logger.info(f"OpenAI API response received in {api_duration:.2f} seconds")
 
@@ -242,7 +242,7 @@ def process_pdf(pdf_path):
         if not isinstance(response.content, str):
             logger.error("Response is not a string")
             return "Error: Response is not a string."
-        
+
         process_duration = time.time() - start_time
         logger.info(f"PDF processing completed in {process_duration:.2f} seconds")
         return response.content
@@ -261,7 +261,7 @@ def process_docx(docx_path):
         logger.info("DOCX file loaded")
 
         all_messages = []
-        
+
         # Extract text
         full_text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
         if full_text:
@@ -358,7 +358,7 @@ def normalize_keys(content_json):
 def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
     """Process a single file and return structured result"""
     logger.info(f"Processing single file: {filename}")
-    
+
     try:
         # Determine file type and process accordingly
         if filename.lower().endswith('.pdf'):
@@ -372,7 +372,7 @@ def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
                 "content": {},
                 "error": f"Unsupported file type: {filename}"
             }
-        
+
         # Check for processing errors
         if isinstance(result, str) and result.startswith("Error"):
             return {
@@ -381,7 +381,7 @@ def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
                 "content": {},
                 "error": result
             }
-        
+
         # Extract JSON from result
         content_json = extract_json_from_content(result)
         # Normalize total_work_experience
@@ -397,7 +397,7 @@ def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
             "content": content_json,
             "error": None
         }
-        
+
     except Exception as e:
         logger.exception(f"Error processing file {filename}: {str(e)}")
         return {
@@ -414,12 +414,12 @@ async def process_single_file_endpoint(
 ):
     """Process a single PDF or DOCX file"""
     logger.info(f"Received single file request: {file.filename}")
-    
+
     # Validate file type
     if not file.filename.lower().endswith(('.pdf', '.docx')):
         logger.warning(f"Invalid file type: {file.filename}")
         raise HTTPException(status_code=400, detail="File must be a PDF or DOCX")
-    
+
     temp_path = None
     try:
         # Create temporary file
@@ -427,19 +427,19 @@ async def process_single_file_endpoint(
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             shutil.copyfileobj(file.file, temp_file)
             temp_path = temp_file.name
-        
+
         logger.info(f"File saved to temporary path: {temp_path}")
-        
+
         # Process the file
         result = process_single_file(temp_path, file.filename)
-        
+
         # Save to PostgreSQL if successful
         # if result["status"] == "success":
         #     upsert_to_postgres(result["content"])
-        
+
         logger.info(f"Single file processing completed: {file.filename}")
         return JSONResponse(content=result)
-    
+
     except Exception as e:
         logger.exception(f"Unhandled exception in single file processing: {str(e)}")
         return JSONResponse(
@@ -464,24 +464,24 @@ async def process_multiple_files_endpoint(
 ):
     """Process multiple PDF and DOCX files"""
     logger.info(f"Received multiple files request: {len(files)} files")
-    
+
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
-    
+
     if len(files) > 10:  # Limit to prevent abuse
         raise HTTPException(status_code=400, detail="Maximum 10 files allowed per request")
-    
+
     results = []
     errors = []
     successful_files = 0
     failed_files = 0
     temp_paths = []
-    
+
     try:
         # Process each file
         for i, file in enumerate(files):
             logger.info(f"Processing file {i+1}/{len(files)}: {file.filename}")
-            
+
             # Validate file type
             if not file.filename.lower().endswith(('.pdf', '.docx')):
                 error_msg = f"File {file.filename} has unsupported type. Only PDF and DOCX are allowed."
@@ -495,7 +495,7 @@ async def process_multiple_files_endpoint(
                 })
                 failed_files += 1
                 continue
-            
+
             temp_path = None
             try:
                 # Create temporary file
@@ -504,11 +504,11 @@ async def process_multiple_files_endpoint(
                     shutil.copyfileobj(file.file, temp_file)
                     temp_path = temp_file.name
                 temp_paths.append(temp_path)
-                
+
                 # Process the file
                 result = process_single_file(temp_path, file.filename)
                 results.append(result)
-                
+
                 if result["status"] == "success":
                     successful_files += 1
                     # Save to PostgreSQL if successful
@@ -517,9 +517,9 @@ async def process_multiple_files_endpoint(
                     failed_files += 1
                     if result["error"]:
                         errors.append(f"{file.filename}: {result['error']}")
-                
+
                 logger.info(f"File {i+1}/{len(files)} processed: {file.filename} - Status: {result['status']}")
-                
+
             except Exception as e:
                 error_msg = f"Error processing {file.filename}: {str(e)}"
                 logger.exception(error_msg)
@@ -531,7 +531,7 @@ async def process_multiple_files_endpoint(
                     "error": str(e)
                 })
                 failed_files += 1
-        
+
         # Prepare final response
         response = {
             "status": "completed",
@@ -541,10 +541,10 @@ async def process_multiple_files_endpoint(
             "failed_files": failed_files,
             "errors": errors
         }
-        
+
         logger.info(f"Multiple files processing completed. Success: {successful_files}, Failed: {failed_files}")
         return JSONResponse(content=response)
-    
+
     except Exception as e:
         logger.exception(f"Unhandled exception in multiple files processing: {str(e)}")
         return JSONResponse(
@@ -576,7 +576,7 @@ async def process_resume_endpoint(
     """Legacy endpoint for single resume processing - maintained for backward compatibility"""
     logger.info(f"Resume processing request received (legacy endpoint)")
     result = await process_single_file_endpoint(file=file)
-    
+
     # Convert to legacy format
     if isinstance(result, JSONResponse):
         content = result.body.decode() if hasattr(result, 'body') else '{}'
@@ -586,7 +586,7 @@ async def process_resume_endpoint(
             parsed_content = {"error": "Failed to parse response"}
     else:
         parsed_content = result
-    
+
     # Convert to ProcessResponse format
     legacy_response = {
         "unique_id": f"resume_{int(time.time())}",
@@ -594,7 +594,7 @@ async def process_resume_endpoint(
         "content": parsed_content.get("content", {}),
         "error": parsed_content.get("error")
     }
-    
+
     return JSONResponse(content=legacy_response)
 
 # ROOT ENDPOINT
@@ -616,27 +616,27 @@ async def root():
 async def log_requests(request, call_next):
     path = request.url.path
     method = request.method
-    
+
     start_time = time.time()
     logger.info(f"Request started: {method} {path}")
-    
+
     response = await call_next(request)
-    
+
     process_time = time.time() - start_time
     logger.info(f"Request completed: {method} {path} - Status: {response.status_code} - Duration: {process_time:.2f}s")
-    
+
     return response
 
 # LOG ROTATION FUNCTIONS
 def get_log_handler():
     current_date = datetime.now().strftime("%Y-%m-%d")
     log_filename = f"{logs_dir}/resume_processor_{current_date}.log"
-    
+
     # Remove existing FileHandlers
     for handler in logger.handlers[:]:
         if isinstance(handler, logging.FileHandler):
             logger.removeHandler(handler)
-    
+
     # Add new FileHandler with updated filename
     file_handler = logging.FileHandler(log_filename)
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
@@ -649,11 +649,11 @@ async def check_log_rotation(request, call_next):
     # Get current date and check if log file needs to be rotated
     current_date = datetime.now().strftime("%Y-%m-%d")
     log_filename = f"{logs_dir}/resume_processor_{current_date}.log"
-    
+
     # If log file doesn't exist for current date, rotate logs
     if not os.path.exists(log_filename):
         get_log_handler()
-    
+
     response = await call_next(request)
     return response
 

@@ -226,6 +226,80 @@
             transform: none;
         }
 
+        #loader-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #loader-overlay.active {
+            display: flex !important;
+            opacity: 1;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .loader-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(255,255,255,0.95);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px #2196f340;
+            padding: 48px 36px 36px 36px;
+            min-width: 320px;
+            animation: popIn 0.4s cubic-bezier(.68,-0.55,.27,1.55);
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .modern-spinner {
+            margin-bottom: 24px;
+        }
+        .modern-spinner svg {
+            display: block;
+        }
+        .modern-spinner .bg {
+            stroke: #e3e3e3;
+        }
+        .modern-spinner .fg {
+            stroke-dasharray: 175;
+            stroke-dashoffset: 0;
+            stroke: url(#spinner-gradient);
+            animation: spin-stroke 1.2s linear infinite;
+        }
+        .modern-spinner svg circle.fg {
+            stroke: #2196F3;
+            filter: drop-shadow(0 0 8px #2196f3aa);
+        }
+        @keyframes spin-stroke {
+            0% { stroke-dashoffset: 175; }
+            100% { stroke-dashoffset: 0; }
+        }
+        .loader-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1976D2;
+            margin-bottom: 8px;
+            letter-spacing: 0.01em;
+            font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .loader-sub {
+            color: #666;
+            font-size: 1rem;
+            margin-bottom: 0;
+            text-align: center;
+        }
+
         @media (max-width: 600px) {
             .content {
                 padding: 40px 20px;
@@ -292,6 +366,18 @@
                 <button type="submit" class="submit-btn">Submit Resume</button>
             </form>
             <div id="result"></div>
+        </div>
+        <div id="loader-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(255,255,255,0.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;transition:opacity 0.3s;">
+            <div class="loader-content">
+                <div class="modern-spinner">
+                    <svg width="70" height="70" viewBox="0 0 70 70">
+                        <circle class="bg" cx="35" cy="35" r="28" fill="none" stroke="#e3e3e3" stroke-width="8"/>
+                        <circle class="fg" cx="35" cy="35" r="28" fill="none" stroke="#2196F3" stroke-width="8" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="loader-title">Processing your resume...</div>
+                <div class="loader-sub">This may take a few seconds. Please wait.</div>
+            </div>
         </div>
     </div>
 
@@ -376,17 +462,22 @@
             }
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
+            const loader = document.getElementById('loader-overlay');
+            loader.classList.add('active');
+            loader.style.display = 'flex';
             try {
                 const response = await fetch('http://localhost:8000/process-resume/', {
                     method: 'POST',
                     body: formData
                 });
                 const result = await response.json();
-                // Store result in sessionStorage and redirect
                 sessionStorage.setItem('resumeResult', JSON.stringify(result));
                 window.location.href = 'result.html';
             } catch (err) {
                 alert('Error: ' + err);
+            } finally {
+                loader.classList.remove('active');
+                loader.style.display = 'none';
             }
         });
     </script>
