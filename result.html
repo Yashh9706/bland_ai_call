@@ -174,38 +174,73 @@
         <footer class="footer">&copy; 2025 Nursefast.ai &mdash; Empowering Healthcare Careers</footer>
     <script>
         const resultDiv = document.getElementById('result');
-        const data = sessionStorage.getItem('resumeResult');
-        const iconMap = {
-            name: '👤',
-            email: '✉️',
-            phone: '📞',
-            address: '🏠',
-            education: '🎓',
-            experience: '💼',
-            skills: '🛠️',
-            summary: '📝',
-            linkedin: '🔗',
-            job_title: '💼',
-            location: '📍',
-            total_work_experience: '⏳',
-            default: '📄'
-        };
+        const data = sessionStorage.getItem('resumeResults');
         if (!data) {
-            resultDiv.innerHTML = '<div class="error">No result found. Please upload a resume first.</div>';
+            resultDiv.innerHTML = '<div class="error">No result found. Please upload resumes first.</div>';
         } else {
             const result = JSON.parse(data);
-            if (result.error) {
-                resultDiv.innerHTML = '<div class="error">' + result.error + '</div>';
+            if (result.errors && result.errors.length > 0) {
+                resultDiv.innerHTML = '<div class="error">' + result.errors.join('<br>') + '</div>';
             } else {
-                const content = result.content;
-                let html = '<div class="result-card">';
-                for (const key in content) {
-                    const icon = iconMap[key.toLowerCase()] || iconMap.default;
-                    const isSummary = key.toLowerCase().includes('summary');
-                    html += `<div class=\"result-field${isSummary ? ' summary' : ''}\"><span class=\"result-icon\">${icon}</span><div><div class=\"label\">${key.replace(/_/g, ' ')}:</div><div class=\"value\">${content[key]}</div></div></div>`;
+                const results = result.results || [];
+                if (results.length === 0) {
+                    resultDiv.innerHTML = '<div class="error">No extraction results found.</div>';
+                } else {
+                    // Collect all unique keys for CSV columns
+                    const allKeys = new Set();
+                    results.forEach(r => Object.keys(r.content || {}).forEach(k => allKeys.add(k)));
+                    const columns = Array.from(allKeys);
+
+                    // Build CSV rows
+                    const csvRows = [];
+                    csvRows.push(columns.join(',')); // header
+                    results.forEach(r => {
+                        const row = columns.map(col => {
+                            let val = (r.content && r.content[col]) ? r.content[col] : '';
+                            // Escape quotes
+                            if (typeof val === 'string' && (val.includes(',') || val.includes('"') || val.includes('\n'))) {
+                                val = '"' + val.replace(/"/g, '""') + '"';
+                            }
+                            return val;
+                        });
+                        csvRows.push(row.join(','));
+                    });
+
+                    // CSV download button
+                    const csvContent = csvRows.join('\n');
+                    const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+                    const csvUrl = URL.createObjectURL(csvBlob);
+
+                    // Show CSV as a table
+                    let csvTable = '<div style="overflow-x:auto;margin-bottom:24px;"><table style="border-collapse:collapse;width:100%;background:#f8fafd;border-radius:8px;box-shadow:0 2px 8px #2196f320;">';
+                    csvTable += '<tr>' + columns.map(col => `<th style="padding:8px 12px;background:#2196F3;color:#fff;text-align:left;">${col.replace(/_/g, ' ')}</th>`).join('') + '</tr>';
+                    results.forEach(r => {
+                        csvTable += '<tr>' + columns.map(col => `<td style="padding:8px 12px;border-bottom:1px solid #e3e3e3;">${(r.content && r.content[col]) ? r.content[col] : ''}</td>`).join('') + '</tr>';
+                    });
+                    csvTable += '</table></div>';
+
+                    let html = `<div style="margin-bottom:24px;">
+                        <a href="${csvUrl}" download="extracted_resumes.csv" class="back-btn" style="background:#2196F3;">⬇️ Download CSV</a>
+                    </div>`;
+                    html += csvTable;
+
+                    // Show a summary table (optional, keep if you want the card view too)
+                    html += '<div class="result-card">';
+                    results.forEach((r, idx) => {
+                        html += `<div class="result-field summary" style="grid-column:1/3;">
+                            <div><b>File:</b> ${r.filename || 'N/A'}<br><b>Status:</b> ${r.status}</div>
+                        </div>`;
+                        for (const key of columns) {
+                            if (r.content && r.content[key]) {
+                                html += `<div class="result-field"><span class="result-icon">📄</span>
+                                    <div><div class="label">${key.replace(/_/g, ' ')}:</div>
+                                    <div class="value">${r.content[key]}</div></div></div>`;
+                            }
+                        }
+                    });
+                    html += '</div>';
+                    resultDiv.innerHTML = html;
                 }
-                html += '</div>';
-                resultDiv.innerHTML = html;
             }
         }
     </script>

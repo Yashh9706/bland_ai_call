@@ -346,7 +346,7 @@
                         📄 Resume <span class="required">*</span>
                     </label>
                     <label for="resume-upload" class="file-upload" id="file-upload-area">
-                        <input type="file" id="resume-upload" accept=".pdf,.docx" required>
+                        <input type="file" id="resume-upload" accept=".pdf,.docx" required multiple>
                         <div class="upload-icon">📎</div>
                         <div class="upload-text">Click to upload or drag and drop</div>
                         <div class="upload-subtext">Maximum file size: 10MB</div>
@@ -457,21 +457,23 @@
             e.preventDefault();
             const fileInput = document.getElementById('resume-upload');
             if (!fileInput.files.length) {
-                alert('Please select a file.');
+                alert('Please select at least one file.');
                 return;
             }
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            for (const file of fileInput.files) {
+                formData.append('files', file);
+            }
             const loader = document.getElementById('loader-overlay');
             loader.classList.add('active');
             loader.style.display = 'flex';
             try {
-                const response = await fetch('http://localhost:8000/process-resume/', {
+                const response = await fetch('http://localhost:8000/process-multiple-files/', {
                     method: 'POST',
                     body: formData
                 });
                 const result = await response.json();
-                sessionStorage.setItem('resumeResult', JSON.stringify(result));
+                sessionStorage.setItem('resumeResults', JSON.stringify(result));
                 window.location.href = 'result.html';
             } catch (err) {
                 alert('Error: ' + err);
