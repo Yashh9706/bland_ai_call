@@ -14,7 +14,7 @@ from datetime import datetime
 from config import SYSTEM_PROMPT
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # Import your existing processing code components
 from langchain.schema import HumanMessage, SystemMessage
@@ -54,7 +54,7 @@ logger.info("System prompt loaded from config")
 # Initialize FastAPI app
 app = FastAPI(
     title="PDF Processing API",
-    description="API to process PDFs using LLM",
+    description="API to process PDFs and DOCX files using LLM - supports single and multiple files",
     version="1.0.0"
 )
 logger.info("FastAPI application initialized")
@@ -76,12 +76,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Response model
+# Response models
 class ProcessResponse(BaseModel):
     unique_id: str
     status: str
     content: Dict[str, Any]
     error: Optional[str] = None
+
+class MultiProcessResponse(BaseModel):
+    status: str
+    results: List[Dict[str, Any]]
+    total_files: int
+    successful_files: int
+    failed_files: int
+    errors: List[str] = []
 
 def extract_json_from_content(content: str) -> Dict[str, Any]:
     """Extract JSON object from content string that might contain markdown code blocks."""
@@ -331,103 +339,264 @@ def process_docx(docx_path):
     except Exception as e:
         logger.exception(f"Error processing DOCX: {str(e)}")
         return f"Error processing DOCX: {str(e)}"
-    
-async def process_pdf_endpoint(
-    file: UploadFile = File(...)
-):
-    logger.info(f"Received request for file: {file.filename}")
-    
-    # Validate file
-    if not file.filename.lower().endswith(('.pdf', '.docx')):
 
-        logger.warning(f"Invalid file type: {file.filename}")
-        raise HTTPException(status_code=400, detail="File must be a PDF")
+def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
+    """Process a single file and return structured result"""
+    logger.info(f"Processing single file: {filename}")
     
-    # Create temporary file for PDF
-    temp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            shutil.copyfileobj(file.file, temp_file)
-            temp_path = temp_file.name
-        logger.info(f"PDF saved to temporary file: {temp_path}")
-        
-        # Process the PDF
-        start_time = time.time()
-        if file.filename.lower().endswith('.pdf'):
-            logger.info("Processing PDF file")
-            result = process_pdf(temp_path)
-        elif file.filename.lower().endswith('.docx'):
-            logger.info("Processing DOCX file")
-            result = process_docx(temp_path)
+        # Determine file type and process accordingly
+        if filename.lower().endswith('.pdf'):
+            result = process_pdf(file_path)
+        elif filename.lower().endswith('.docx'):
+            result = process_docx(file_path)
         else:
-            logger.warning(f"Unsupported file type: {file.filename}")
-            raise HTTPException(status_code=400, detail="Unsupported file type")
-        logger.info(f"Processing completed for file: {file.filename}")
-        process_duration = time.time() - start_time
-        logger.info(f"Total processing time: {process_duration:.2f} seconds")
-        print(f"Processing result: {result}")
-        # Check for error
+            return {
+                "filename": filename,
+                "status": "error",
+                "content": {},
+                "error": f"Unsupported file type: {filename}"
+            }
+        
+        # Check for processing errors
         if isinstance(result, str) and result.startswith("Error"):
-            logger.error(f"Processing error: {result}")
-            return JSONResponse(content={
+            return {
+                "filename": filename,
                 "status": "error",
                 "content": {},
                 "error": result
-            })
+            }
         
-        # Extract JSON from the result
+        # Extract JSON from result
         content_json = extract_json_from_content(result)
-
+        
         # Normalize total_work_experience
         if "total_work_experience" in content_json:
             experience_value = str(content_json["total_work_experience"]).strip()
             if experience_value and not experience_value.lower().endswith("years"):
                 content_json["total_work_experience"] = f"{experience_value} years"
-
-        # Save to PostgreSQL
-        # upsert_to_postgres(content_json)
-
-        logger.info(f"Content extracted and ready to return to frontend")
-        # Prepare response
-        response = {
+        
+        return {
+            "filename": filename,
+            "status": "success",
             "content": content_json,
             "error": None
         }
         
-        logger.info(f"Completed successfully")
-        return JSONResponse(content=response)
+    except Exception as e:
+        logger.exception(f"Error processing file {filename}: {str(e)}")
+        return {
+            "filename": filename,
+            "status": "error",
+            "content": {},
+            "error": str(e)
+        }
+
+# SINGLE FILE PROCESSING ENDPOINTS
+@app.post("/process-file/")
+async def process_single_file_endpoint(
+    file: UploadFile = File(...)
+):
+    """Process a single PDF or DOCX file"""
+    logger.info(f"Received single file request: {file.filename}")
+    
+    # Validate file type
+    if not file.filename.lower().endswith(('.pdf', '.docx')):
+        logger.warning(f"Invalid file type: {file.filename}")
+        raise HTTPException(status_code=400, detail="File must be a PDF or DOCX")
+    
+    temp_path = None
+    try:
+        # Create temporary file
+        suffix = '.pdf' if file.filename.lower().endswith('.pdf') else '.docx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            shutil.copyfileobj(file.file, temp_file)
+            temp_path = temp_file.name
+        
+        logger.info(f"File saved to temporary path: {temp_path}")
+        
+        # Process the file
+        result = process_single_file(temp_path, file.filename)
+        
+        # Save to PostgreSQL if successful
+        # if result["status"] == "success":
+        #     upsert_to_postgres(result["content"])
+        
+        logger.info(f"Single file processing completed: {file.filename}")
+        return JSONResponse(content=result)
     
     except Exception as e:
-        logger.exception(f"Unhandled exception: {str(e)}")
+        logger.exception(f"Unhandled exception in single file processing: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
+                "filename": file.filename,
                 "status": "error",
                 "content": {},
                 "error": str(e)
             }
         )
     finally:
-        # Clean up the temporary file
+        # Clean up temporary file
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
-            logger.info("Temporary file removed")
+            logger.info("Temporary file cleaned up")
 
-# Also add an endpoint for resume processing specifically
+# MULTIPLE FILES PROCESSING ENDPOINTS
+@app.post("/process-multiple-files/", response_model=MultiProcessResponse)
+async def process_multiple_files_endpoint(
+    files: List[UploadFile] = File(...)
+):
+    """Process multiple PDF and DOCX files"""
+    logger.info(f"Received multiple files request: {len(files)} files")
+    
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+    
+    if len(files) > 10:  # Limit to prevent abuse
+        raise HTTPException(status_code=400, detail="Maximum 10 files allowed per request")
+    
+    results = []
+    errors = []
+    successful_files = 0
+    failed_files = 0
+    temp_paths = []
+    
+    try:
+        # Process each file
+        for i, file in enumerate(files):
+            logger.info(f"Processing file {i+1}/{len(files)}: {file.filename}")
+            
+            # Validate file type
+            if not file.filename.lower().endswith(('.pdf', '.docx')):
+                error_msg = f"File {file.filename} has unsupported type. Only PDF and DOCX are allowed."
+                logger.warning(error_msg)
+                errors.append(error_msg)
+                results.append({
+                    "filename": file.filename,
+                    "status": "error",
+                    "content": {},
+                    "error": error_msg
+                })
+                failed_files += 1
+                continue
+            
+            temp_path = None
+            try:
+                # Create temporary file
+                suffix = '.pdf' if file.filename.lower().endswith('.pdf') else '.docx'
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                    shutil.copyfileobj(file.file, temp_file)
+                    temp_path = temp_file.name
+                temp_paths.append(temp_path)
+                
+                # Process the file
+                result = process_single_file(temp_path, file.filename)
+                results.append(result)
+                
+                if result["status"] == "success":
+                    successful_files += 1
+                    # Save to PostgreSQL if successful
+                    # upsert_to_postgres(result["content"])
+                else:
+                    failed_files += 1
+                    if result["error"]:
+                        errors.append(f"{file.filename}: {result['error']}")
+                
+                logger.info(f"File {i+1}/{len(files)} processed: {file.filename} - Status: {result['status']}")
+                
+            except Exception as e:
+                error_msg = f"Error processing {file.filename}: {str(e)}"
+                logger.exception(error_msg)
+                errors.append(error_msg)
+                results.append({
+                    "filename": file.filename,
+                    "status": "error",
+                    "content": {},
+                    "error": str(e)
+                })
+                failed_files += 1
+        
+        # Prepare final response
+        response = {
+            "status": "completed",
+            "results": results,
+            "total_files": len(files),
+            "successful_files": successful_files,
+            "failed_files": failed_files,
+            "errors": errors
+        }
+        
+        logger.info(f"Multiple files processing completed. Success: {successful_files}, Failed: {failed_files}")
+        return JSONResponse(content=response)
+    
+    except Exception as e:
+        logger.exception(f"Unhandled exception in multiple files processing: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "results": results,
+                "total_files": len(files),
+                "successful_files": successful_files,
+                "failed_files": failed_files,
+                "errors": [str(e)]
+            }
+        )
+    finally:
+        # Clean up all temporary files
+        for temp_path in temp_paths:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temporary file {temp_path}: {e}")
+        logger.info("All temporary files cleaned up")
+
+# BACKWARD COMPATIBILITY ENDPOINTS
 @app.post("/process-resume/", response_model=ProcessResponse)
 async def process_resume_endpoint(
     file: UploadFile = File(...)
 ):
-    # This is just an alias for process-pdf to maintain backward compatibility
-    logger.info(f"Resume processing request received")
-    return await process_pdf_endpoint(file=file)
+    """Legacy endpoint for single resume processing - maintained for backward compatibility"""
+    logger.info(f"Resume processing request received (legacy endpoint)")
+    result = await process_single_file_endpoint(file=file)
+    
+    # Convert to legacy format
+    if isinstance(result, JSONResponse):
+        content = result.body.decode() if hasattr(result, 'body') else '{}'
+        try:
+            parsed_content = json.loads(content)
+        except:
+            parsed_content = {"error": "Failed to parse response"}
+    else:
+        parsed_content = result
+    
+    # Convert to ProcessResponse format
+    legacy_response = {
+        "unique_id": f"resume_{int(time.time())}",
+        "status": parsed_content.get("status", "error"),
+        "content": parsed_content.get("content", {}),
+        "error": parsed_content.get("error")
+    }
+    
+    return JSONResponse(content=legacy_response)
 
-# Root endpoint
+# ROOT ENDPOINT
 @app.get("/")
 async def root():
-    return {"message": "PDF Processing API is running. Use /process-resume/ endpoint to process PDFs."}
+    return {
+        "message": "PDF and DOCX Processing API is running",
+        "endpoints": {
+            "single_file": "/process-file/ - Process a single PDF or DOCX file",
+            "multiple_files": "/process-multiple-files/ - Process multiple PDF and DOCX files",
+            "legacy_resume": "/process-resume/ - Legacy endpoint for single resume processing"
+        },
+        "supported_formats": ["PDF", "DOCX"],
+        "max_files_per_request": 10
+    }
 
-# Middleware for request logging (simplified)
+# REQUEST LOGGING MIDDLEWARE
 @app.middleware("http")
 async def log_requests(request, call_next):
     path = request.url.path
@@ -443,7 +612,7 @@ async def log_requests(request, call_next):
     
     return response
 
-# Function to create a new log file handler when the date changes
+# LOG ROTATION FUNCTIONS
 def get_log_handler():
     current_date = datetime.now().strftime("%Y-%m-%d")
     log_filename = f"{logs_dir}/resume_processor_{current_date}.log"
@@ -460,7 +629,6 @@ def get_log_handler():
     logger.info(f"Log file rotated to: {log_filename}")
     return file_handler
 
-# Add middleware to check if log file needs to be rotated
 @app.middleware("http")
 async def check_log_rotation(request, call_next):
     # Get current date and check if log file needs to be rotated
@@ -476,5 +644,5 @@ async def check_log_rotation(request, call_next):
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting FastAPI server")
+    logger.info("Starting FastAPI server with multi-file support")
     uvicorn.run(app, host="0.0.0.0", port=8000)
