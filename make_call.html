@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Nursefast.ai - Nursing Career Opportunities</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            /* Nurse color palette */
+            --nurse-50: #e6f6ff;
+            --nurse-100: #cceeff;
+            --nurse-600: #0081cc;
+            --white: #ffffff;
+            --gray-50: #f9fafb;
+            --green-50: #f0fdf4;
+            --red-50: #fef2f2;
+            --orange-red: #ff3f00;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Hero section gradient background */
+            background: linear-gradient(135deg, var(--nurse-50) 0%, var(--white) 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(0,129,204,0.05)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            pointer-events: none;
+        }
+
+        .form-container {
+            /* White background like NurseHowItWorksSection */
+            background: var(--white);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 129, 204, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0, 129, 204, 0.15);
+            width: 100%;
+            max-width: 500px;
+            position: relative;
+            animation: slideUp 0.8s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .brand-header {
+            text-align: center;
+            margin-bottom: 35px;
+            /* Light blue background like NurseInterestForm */
+            background: var(--nurse-50);
+            padding: 20px;
+            border-radius: 16px;
+            margin: -20px -20px 35px -20px;
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .brand-icon {
+            width: 50px;
+            height: 50px;
+            /* Icon container background */
+            background: var(--nurse-100);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--nurse-600);
+            font-size: 24px;
+            box-shadow: 0 8px 20px rgba(0, 129, 204, 0.2);
+        }
+
+        .brand-name {
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--nurse-600) 0%, var(--orange-red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .brand-tagline {
+            color: #666;
+            font-size: 14px;
+            font-weight: 400;
+            margin-top: 5px;
+        }
+
+        .form-title {
+            color: #333;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .form-subtitle {
+            color: #666;
+            font-size: 16px;
+            font-weight: 400;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+            position: relative;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .label-icon {
+            color: var(--orange-red);
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e1e8ed;
+            border-radius: 12px;
+            font-size: 16px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s ease;
+            /* Light gray background like comparison section */
+            background-color: var(--gray-50);
+            position: relative;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--nurse-600);
+            background-color: var(--white);
+            box-shadow: 0 0 0 4px rgba(0, 129, 204, 0.1);
+            transform: translateY(-1px);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .phone-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .country-select {
+            width: 130px;
+            flex-shrink: 0;
+        }
+
+        .phone-input {
+            flex: 1;
+        }
+
+        .submit-btn {
+            width: 100%;
+            /* Final CTA section gradient */
+            background: linear-gradient(135deg, var(--nurse-600) 0%, var(--orange-red) 100%);
+            color: var(--white);
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .submit-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #006199 0%, #cc3200 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(0, 129, 204, 0.4);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn-text {
+            transition: opacity 0.3s ease;
+        }
+
+        .btn-text.hidden {
+            opacity: 0;
+        }
+
+        .loader {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid var(--white);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .loader.visible {
+            opacity: 1;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .required {
+            color: var(--orange-red);
+        }
+
+        .success-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            /* Form success state background */
+            background: var(--green-50);
+            color: #065f46;
+            border: 1px solid #10b981;
+            padding: 16px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(5, 150, 105, 0.2);
+            transform: translateX(400px);
+            transition: transform 0.4s ease;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .success-message.show {
+            transform: translateX(0);
+        }
+
+        .error-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            /* Semi-transparent light red like comparison cards */
+            background: var(--red-50);
+            color: #991b1b;
+            border: 1px solid var(--orange-red);
+            padding: 16px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(255, 63, 0, 0.2);
+            transform: translateX(400px);
+            transition: transform 0.4s ease;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error-message.show {
+            transform: translateX(0);
+        }
+
+        .form-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(135deg, var(--nurse-600) 0%, var(--orange-red) 100%);
+            border-radius: 20px 20px 0 0;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .floating-elements {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .floating-element {
+            position: absolute;
+            color: rgba(0, 129, 204, 0.1);
+            font-size: 20px;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .floating-element:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
+        .floating-element:nth-child(2) { top: 20%; right: 10%; animation-delay: 1s; }
+        .floating-element:nth-child(3) { bottom: 30%; left: 15%; animation-delay: 2s; }
+        .floating-element:nth-child(4) { bottom: 20%; right: 15%; animation-delay: 3s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+
+        .help-text {
+            color: #666;
+            font-size: 12px;
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Comparison card styles using the palette */
+        .comparison-card {
+            background: var(--nurse-50);
+            border: 1px solid rgba(0, 129, 204, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 10px 0;
+        }
+
+        .comparison-card.highlight {
+            background: rgba(0, 129, 204, 0.05);
+            border-color: var(--nurse-600);
+        }
+
+        @media (max-width: 480px) {
+            .form-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            .brand-header {
+                margin: -15px -15px 35px -15px;
+                padding: 15px;
+            }
+
+            .brand-name {
+                font-size: 28px;
+            }
+
+            .form-title {
+                font-size: 20px;
+            }
+
+            .phone-group {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .country-select {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-elements">
+        <i class="fas fa-heartbeat floating-element"></i>
+        <i class="fas fa-stethoscope floating-element"></i>
+        <i class="fas fa-user-nurse floating-element"></i>
+        <i class="fas fa-hospital floating-element"></i>
+    </div>
+
+    <div class="form-container">
+        <div class="form-progress" id="formProgress"></div>
+
+        <div class="brand-header">
+            <div class="brand-logo">
+                <div class="brand-icon">
+                    <i class="fas fa-user-nurse"></i>
+                </div>
+                <div class="brand-name">Nursefast.ai</div>
+            </div>
+            <div class="brand-tagline">Connecting Healthcare Professionals Worldwide</div>
+        </div>
+
+        <div class="form-title">Join Our Nursing Network</div>
+        <div class="form-subtitle">Apply for exciting nursing opportunities and get connected instantly</div>
+
+        <form id="jobForm" action="/submit-job-application" method="POST">
+            <div class="form-group">
+                <label for="full_name">
+                    <i class="fas fa-user label-icon"></i>
+                    Full Name <span class="required">*</span>
+                </label>
+                <input type="text" id="full_name" name="full_name" required placeholder="e.g., Sarah Johnson">
+            </div>
+
+            <div class="form-group">
+                <label for="job_title">
+                    <i class="fas fa-briefcase label-icon"></i>
+                    Nursing Position <span class="required">*</span>
+                </label>
+                <input type="text" id="job_title" name="job_title" required placeholder="e.g., Registered Nurse, ICU Nurse, Pediatric Nurse">
+            </div>
+
+            <div class="form-group">
+                <label for="pay">
+                    <i class="fas fa-dollar-sign label-icon"></i>
+                    Expected Salary <span class="required">*</span>
+                </label>
+                <input type="text" id="pay" name="pay" required placeholder="e.g., $75,000 annual or $35/hour">
+                <div class="help-text">
+                    <i class="fas fa-info-circle"></i>
+                    Include your expected annual salary or hourly rate
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="location">
+                    <i class="fas fa-map-marker-alt label-icon"></i>
+                    Preferred Location <span class="required">*</span>
+                </label>
+                <input type="text" id="location" name="location" required placeholder="e.g., New York, NY or Remote">
+            </div>
+
+            <div class="form-group">
+                <label for="work_experience">
+                    <i class="fas fa-clock label-icon"></i>
+                    Healthcare Experience <span class="required">*</span>
+                </label>
+                <input type="text" id="work_experience" name="work_experience" required placeholder="e.g., 3 years, 2.5 years, New Graduate">
+                <div class="help-text">
+                    <i class="fas fa-info-circle"></i>
+                    Include your total nursing or healthcare experience
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="phone_number">
+                    <i class="fas fa-phone label-icon"></i>
+                    Phone Number <span class="required">*</span>
+                </label>
+                <div class="phone-group">
+                    <select id="country_code" name="country_code" required class="country-select">
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="+91">🇮🇳 +91</option>
+                        <option value="+44">🇬🇧 +44</option>
+                        <option value="+86">🇨🇳 +86</option>
+                        <option value="+81">🇯🇵 +81</option>
+                        <option value="+49">🇩🇪 +49</option>
+                        <option value="+33">🇫🇷 +33</option>
+                        <option value="+39">🇮🇹 +39</option>
+                        <option value="+7">🇷🇺 +7</option>
+                        <option value="+55">🇧🇷 +55</option>
+                        <option value="+61">🇦🇺 +61</option>
+                        <option value="+34">🇪🇸 +34</option>
+                        <option value="+31">🇳🇱 +31</option>
+                        <option value="+46">🇸🇪 +46</option>
+                        <option value="+41">🇨🇭 +41</option>
+                        <option value="+82">🇰🇷 +82</option>
+                        <option value="+65">🇸🇬 +65</option>
+                        <option value="+60">🇲🇾 +60</option>
+                        <option value="+66">🇹🇭 +66</option>
+                        <option value="+62">🇮🇩 +62</option>
+                        <option value="+63">🇵🇭 +63</option>
+                        <option value="+84">🇻🇳 +84</option>
+                        <option value="+234">🇳🇬 +234</option>
+                        <option value="+27">🇿🇦 +27</option>
+                        <option value="+20">🇪🇬 +20</option>
+                        <option value="+52">🇲🇽 +52</option>
+                        <option value="+54">🇦🇷 +54</option>
+                        <option value="+56">🇨🇱 +56</option>
+                        <option value="+57">🇨🇴 +57</option>
+                        <option value="+51">🇵🇪 +51</option>
+                    </select>
+                    <input type="text" id="phone_number_input" name="phone_number_input" required placeholder="9851934567" pattern="[0-9]{6,15}" class="phone-input">
+                </div>
+                <div class="help-text">
+                    <i class="fas fa-shield-alt"></i>
+                    We'll call you to discuss opportunities
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+                <span class="btn-text" id="btnText">
+                    <i class="fas fa-paper-plane"></i>
+                    Submit Application & Start Call
+                </span>
+                <div class="loader" id="loader"></div>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // Form progress tracking
+        const formInputs = document.querySelectorAll('input[required], select[required]');
+        const progressBar = document.getElementById('formProgress');
+
+        function updateProgress() {
+            let filledInputs = 0;
+            formInputs.forEach(input => {
+                if (input.value.trim() !== '') {
+                    filledInputs++;
+                }
+            });
+            const progress = (filledInputs / formInputs.length) * 100;
+            progressBar.style.width = progress + '%';
+        }
+
+        formInputs.forEach(input => {
+            input.addEventListener('input', updateProgress);
+            input.addEventListener('change', updateProgress);
+        });
+
+        function showMessage(message, type = 'success') {
+            // Remove existing messages
+            document.querySelectorAll('.success-message, .error-message').forEach(msg => msg.remove());
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type === 'success' ? 'success-message' : 'error-message';
+            messageDiv.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                ${message}
+            `;
+            document.body.appendChild(messageDiv);
+
+            setTimeout(() => messageDiv.classList.add('show'), 100);
+            setTimeout(() => {
+                messageDiv.classList.remove('show');
+                setTimeout(() => messageDiv.remove(), 400);
+            }, 4000);
+        }
+
+        document.getElementById('jobForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            const loader = document.getElementById('loader');
+
+            // Show loading state
+            submitBtn.disabled = true;
+            btnText.classList.add('hidden');
+            loader.classList.add('visible');
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+
+            // Combine country code with phone number
+            const countryCode = data.country_code;
+            const phoneNumberInput = data.phone_number_input;
+            data.phone_number = countryCode + phoneNumberInput;
+
+            // Remove the separate fields since we now have the combined phone_number
+            delete data.country_code;
+            delete data.phone_number_input;
+
+            try {
+                const response = await fetch('/submit-job-application', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showMessage('🎉 Application submitted successfully! Our team will call you shortly to discuss exciting nursing opportunities.', 'success');
+                    this.reset();
+                    updateProgress();
+                } else {
+                    const error = await response.json();
+                    showMessage('❌ ' + (error.detail || 'Submission failed. Please try again.'), 'error');
+                }
+            } catch (error) {
+                showMessage('❌ Network error: ' + error.message, 'error');
+            } finally {
+                // Reset button state
+                setTimeout(() => {
+                    submitBtn.disabled = false;
+                    btnText.classList.remove('hidden');
+                    loader.classList.remove('visible');
+                }, 1000);
+            }
+        });
+
+        // Add some interactive animations
+        document.querySelectorAll('input, select, textarea').forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentElement.style.transform = 'scale(1.02)';
+            });
+
+            input.addEventListener('blur', function() {
+                this.parentElement.style.transform = 'scale(1)';
+            });
+        });
+    </script>
+</body>
+</html>
