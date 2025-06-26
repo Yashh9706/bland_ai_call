@@ -135,7 +135,7 @@ def process_job_application(application: JobApplication) -> dict:
     data = {
         "phone_number": application.phone_number,
         "pathway_id": PATHWAY_ID,
-        "voice": "85a2c852-2238-4651-acf0-e5cbe02f6f2",
+        "voice": "bb93401e-12ea-4d08-8f8b-6d346cb41add",
         "task": "test_bland_ai_call",
         "wait_for_greeting": True,
         "request_data": {

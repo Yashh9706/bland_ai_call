@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Nursefast.ai - Nursing Career Opportunities</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -384,16 +387,16 @@
                 padding: 30px 20px;
                 margin: 10px;
             }
-            
+
             .brand-header {
                 margin: -15px -15px 35px -15px;
                 padding: 15px;
             }
-            
+
             .brand-name {
                 font-size: 28px;
             }
-            
+
             .form-title {
                 font-size: 20px;
             }
@@ -419,7 +422,7 @@
 
     <div class="form-container">
         <div class="form-progress" id="formProgress"></div>
-        
+
         <div class="brand-header">
             <div class="brand-logo">
                 <div class="brand-icon">
@@ -432,8 +435,16 @@
 
         <div class="form-title">Join Our Nursing Network</div>
         <div class="form-subtitle">Apply for exciting nursing opportunities and get connected instantly</div>
-        
-        <form id="jobForm" action="http://localhost:8000/submit-job-application" method="POST">
+
+        <form id="jobForm" action="http://127.0.0.1:8000/submit-job-application" method="POST">
+            <div class="form-group">
+                <label for="full_name">
+                    <i class="fas fa-user label-icon"></i>
+                    Full Name <span class="required">*</span>
+                </label>
+                <input type="text" id="full_name" name="full_name" required placeholder="e.g., Sarah Johnson">
+            </div>
+
             <div class="form-group">
                 <label for="job_title">
                     <i class="fas fa-briefcase label-icon"></i>
@@ -534,7 +545,7 @@
         // Form progress tracking
         const formInputs = document.querySelectorAll('input[required], select[required]');
         const progressBar = document.getElementById('formProgress');
-        
+
         function updateProgress() {
             let filledInputs = 0;
             formInputs.forEach(input => {
@@ -554,7 +565,7 @@
         function showMessage(message, type = 'success') {
             // Remove existing messages
             document.querySelectorAll('.success-message, .error-message').forEach(msg => msg.remove());
-            
+
             const messageDiv = document.createElement('div');
             messageDiv.className = type === 'success' ? 'success-message' : 'error-message';
             messageDiv.innerHTML = `
@@ -562,7 +573,7 @@
                 ${message}
             `;
             document.body.appendChild(messageDiv);
-            
+
             setTimeout(() => messageDiv.classList.add('show'), 100);
             setTimeout(() => {
                 messageDiv.classList.remove('show');
@@ -572,37 +583,37 @@
 
         document.getElementById('jobForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const submitBtn = document.getElementById('submitBtn');
             const btnText = document.getElementById('btnText');
             const loader = document.getElementById('loader');
-            
+
             // Show loading state
             submitBtn.disabled = true;
             btnText.classList.add('hidden');
             loader.classList.add('visible');
-            
+
             const formData = new FormData(this);
             const data = Object.fromEntries(formData);
-            
+
             // Combine country code with phone number
             const countryCode = data.country_code;
             const phoneNumberInput = data.phone_number_input;
             data.phone_number = countryCode + phoneNumberInput;
-            
+
             // Remove the separate fields since we now have the combined phone_number
             delete data.country_code;
             delete data.phone_number_input;
-            
+
             try {
-                const response = await fetch('http://localhost:8000/submit-job-application', {
+                const response = await fetch('/submit-job-application', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(data)
                 });
-                
+
                 if (response.ok) {
                     const result = await response.json();
                     showMessage('🎉 Application submitted successfully! Our team will call you shortly to discuss exciting nursing opportunities.', 'success');
@@ -629,7 +640,7 @@
             input.addEventListener('focus', function() {
                 this.parentElement.style.transform = 'scale(1.02)';
             });
-            
+
             input.addEventListener('blur', function() {
                 this.parentElement.style.transform = 'scale(1)';
             });

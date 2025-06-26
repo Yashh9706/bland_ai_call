@@ -52,6 +52,20 @@ async def serve_result():
     return FileResponse(html_path, media_type="text/html")
 
 
+@app.get("/choose.html", include_in_schema=False)
+async def serve_choose():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(current_dir, "choose.html")
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/make_call.html", include_in_schema=False)
+async def serve_make_call():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(current_dir, "make_call.html")
+    return FileResponse(html_path, media_type="text/html")
+
+
 @app.post("/send_email")
 async def send_email(email: EmailSchema):
     return send_job_application_email(email)
@@ -65,18 +79,21 @@ async def not_interested(email: EmailSchema):
 
 @app.post("/submit-job-application")
 async def submit_job(application: JobApplication):
+    logger.info(f"Received job application: {application}")
     try:
         result = process_job_application(application)
         return {"success": True, "data": result}
     except ValueError as e:
+        logger.error(f"Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Internal error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/", include_in_schema=False)
-async def root_redirect():
-    return RedirectResponse(url="/index.html")
+async def root_choose():
+    return RedirectResponse(url="/choose.html")
 
 
 @app.exception_handler(RequestValidationError)
@@ -196,22 +213,6 @@ async def process_multiple_files_endpoint(
                 except Exception as e:
                     logger.warning(f"Failed to delete temporary file {temp_path}: {e}")
         logger.info("All temporary files cleaned up")
-
-# # ROOT ENDPOINT
-# @app.get("/")
-# async def root():
-#     return {
-#         "message": "Document Processing API is running",
-#         "version": "2.0.0",
-#         "endpoint": "/process-multiple-files/ - Process single or multiple PDF/DOCX files",
-#         "supported_formats": ["PDF", "DOCX"],
-#         "max_files_per_request": 10,
-#         "usage": {
-#             "single_file": "Upload 1 file to process a single document",
-#             "multiple_files": "Upload 2-10 files to process multiple documents at once"
-#         }
-#     }
-
 
 if __name__ == "__main__":
     import uvicorn
