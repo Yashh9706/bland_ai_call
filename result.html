@@ -140,9 +140,12 @@
         .summary-cell {
             max-width: 420px;
             min-width: 180px;
-            max-height: 120px;
-            overflow-y: auto;
-            white-space: pre-line;
+            max-height: 4.5em;
+            overflow: hidden;
+            white-space: normal;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
             background: #f5f7fa;
             border-radius: 8px;
             padding: 10px 12px;
@@ -151,6 +154,7 @@
             box-shadow: 0 1px 4px #2196f320;
             line-height: 1.5;
             transition: box-shadow 0.2s;
+            cursor: pointer;
         }
         .summary-cell:hover {
             box-shadow: 0 4px 16px #2196f340;

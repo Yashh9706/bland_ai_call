@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List, Dict, Any
 
 
 class EmailSchema(BaseModel):
@@ -19,3 +20,11 @@ class JobApplication(BaseModel):
     location: str
     work_experience: str
     phone_number: str
+
+class MultiProcessResponse(BaseModel):
+    status: str
+    results: List[Dict[str, Any]]
+    total_files: int
+    successful_files: int
+    failed_files: int
+    errors: List[str] = []
