@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nursefast.ai - Upload Resume</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 500px;
+            width: 100%;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(90deg, #2196F3 0%, #FF5722 100%);
+            height: 4px;
+        }
+
+        .content {
+            padding: 50px 40px;
+        }
+
+        .logo-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .logo-icon {
+            width: 24px;
+            height: 24px;
+            background: #2196F3;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .logo-text {
+            font-size: 28px;
+            font-weight: 600;
+            color: #2196F3;
+        }
+
+        .tagline {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .form-subtitle {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 40px;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 30px;
+        }
+
+        .form-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+            justify-content: center;
+        }
+
+        .required {
+            color: #FF5722;
+        }
+
+        .file-upload {
+            position: relative;
+            display: block;
+            width: 100%;
+            padding: 40px 20px;
+            border: 3px dashed #ddd;
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+
+        .file-upload:hover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+            transform: translateY(-2px);
+        }
+
+        .file-upload.dragover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+            transform: scale(1.02);
+        }
+
+        .file-upload input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 28px;
+        }
+
+        .upload-text {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .upload-subtext {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .file-formats {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .format-badge {
+            background: #e3f2fd;
+            color: #2196F3;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .file-info {
+            margin-top: 20px;
+            padding: 16px;
+            background: linear-gradient(135deg, #e8f5e8, #d4edda);
+            border-radius: 8px;
+            color: #2e7d2e;
+            font-size: 14px;
+            display: none;
+            border-left: 4px solid #28a745;
+        }
+
+        .file-info-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(90deg, #2196F3 0%, #FF5722 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .submit-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(33, 150, 243, 0.3);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @media (max-width: 600px) {
+            .content {
+                padding: 40px 20px;
+            }
+            
+            .container {
+                margin: 10px;
+            }
+
+            .upload-icon {
+                width: 56px;
+                height: 56px;
+                font-size: 24px;
+            }
+
+            .upload-text {
+                font-size: 16px;
+            }
+
+            .form-title {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header"></div>
+        <div class="content">
+            <div class="logo-section">
+                <div class="logo">
+                    <div class="logo-icon">👩‍⚕️</div>
+                    <div class="logo-text">Nursefast.ai</div>
+                </div>
+                <div class="tagline">Connecting Healthcare Professionals Worldwide</div>
+            </div>
+
+            <form id="resumeForm" enctype="multipart/form-data">
+                <div class="form-title">Upload Your Resume</div>
+                <div class="form-subtitle">Share your resume to get connected with exciting nursing opportunities instantly</div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        📄 Resume <span class="required">*</span>
+                    </label>
+                    <label for="resume-upload" class="file-upload" id="file-upload-area">
+                        <input type="file" id="resume-upload" accept=".pdf,.docx" required>
+                        <div class="upload-icon">📎</div>
+                        <div class="upload-text">Click to upload or drag and drop</div>
+                        <div class="upload-subtext">Maximum file size: 10MB</div>
+                        <div class="file-formats">
+                            <span class="format-badge">PDF</span>
+                            <span class="format-badge">DOCX</span>
+                        </div>
+                    </label>
+                    <div class="file-info" id="file-info">
+                        <div class="file-info-content">
+                            <span>✅</span>
+                            <span id="file-details"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn">Submit Resume</button>
+            </form>
+            <div id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // File upload functionality
+        const fileInput = document.getElementById('resume-upload');
+        const fileUploadArea = document.getElementById('file-upload-area');
+        const fileInfo = document.getElementById('file-info');
+        const fileDetails = document.getElementById('file-details');
+
+        // Handle file selection
+        fileInput.addEventListener('change', handleFileSelect);
+
+        // Handle drag and drop
+        fileUploadArea.addEventListener('dragover', handleDragOver);
+        fileUploadArea.addEventListener('dragleave', handleDragLeave);
+        fileUploadArea.addEventListener('drop', handleDrop);
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                displayFileInfo(file);
+            }
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            fileUploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
+            
+            const file = e.dataTransfer.files[0];
+            if (file && isValidFile(file)) {
+                fileInput.files = e.dataTransfer.files;
+                displayFileInfo(file);
+            } else {
+                showError('Please upload a PDF or DOCX file only (max 10MB).');
+            }
+        }
+
+        function isValidFile(file) {
+            const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            
+            return allowedTypes.includes(file.type) && file.size <= maxSize;
+        }
+
+        function displayFileInfo(file) {
+            if (!isValidFile(file)) {
+                showError('Please upload a PDF or DOCX file under 10MB.');
+                return;
+            }
+
+            const fileSize = (file.size / 1024 / 1024).toFixed(2);
+            const fileType = file.type.includes('pdf') ? 'PDF' : 'DOCX';
+            
+            fileDetails.textContent = `${file.name} (${fileSize} MB, ${fileType}) - Ready to submit`;
+            fileInfo.style.display = 'block';
+        }
+
+        function showError(message) {
+            alert(message);
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+        }
+
+        // Form submission
+        document.getElementById('resumeForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('resume-upload');
+            if (!fileInput.files.length) {
+                alert('Please select a file.');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            try {
+                const response = await fetch('http://localhost:8000/process-resume/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                // Store result in sessionStorage and redirect
+                sessionStorage.setItem('resumeResult', JSON.stringify(result));
+                window.location.href = 'result.html';
+            } catch (err) {
+                alert('Error: ' + err);
+            }
+        });
+    </script>
+</body>
+</html>

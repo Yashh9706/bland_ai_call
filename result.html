@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Resume Extraction Result</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f3f6fa; margin: 0; padding: 0; }
+        .container { max-width: 700px; margin: 40px auto; background: #fff; border-radius: 10px; box-shadow: 0 4px 24px #0001; padding: 32px; }
+        h1 { color: #2196F3; }
+        .field { margin-bottom: 18px; }
+        .label { font-weight: bold; color: #333; }
+        .value { color: #444; }
+        .error { color: #d32f2f; background: #ffebee; padding: 12px; border-radius: 6px; margin-bottom: 20px; }
+        .back-btn { display: inline-block; margin-top: 24px; padding: 10px 24px; background: #2196F3; color: #fff; border: none; border-radius: 6px; text-decoration: none; font-size: 16px; }
+        .back-btn:hover { background: #1976D2; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Resume Extraction Result</h1>
+        <div id="result"></div>
+        <a href="index_resume.html" class="back-btn">Upload Another Resume</a>
+    </div>
+    <script>
+        const resultDiv = document.getElementById('result');
+        const data = sessionStorage.getItem('resumeResult');
+        if (!data) {
+            resultDiv.innerHTML = '<div class="error">No result found. Please upload a resume first.</div>';
+        } else {
+            const result = JSON.parse(data);
+            if (result.error) {
+                resultDiv.innerHTML = '<div class="error">' + result.error + '</div>';
+            } else {
+                const content = result.content;
+                let html = '';
+                for (const key in content) {
+                    html += `<div class="field"><span class="label">${key.replace(/_/g, ' ')}:</span> <span class="value">${content[key]}</span></div>`;
+                }
+                resultDiv.innerHTML = html;
+            }
+        }
+    </script>
+</body>
+</html>
