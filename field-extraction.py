@@ -340,6 +340,21 @@ def process_docx(docx_path):
         logger.exception(f"Error processing DOCX: {str(e)}")
         return f"Error processing DOCX: {str(e)}"
 
+def normalize_keys(content_json):
+    """Map old keys to new keys for CSV and display."""
+    key_map = {
+        "phone": "phone_number",
+        "name": "full_name",
+        "job title": "job_title",
+        "job_title": "job_title",
+        "location": "location"
+    }
+    new_json = {}
+    for k, v in content_json.items():
+        new_key = key_map.get(k.strip().lower(), k)
+        new_json[new_key] = v
+    return new_json
+
 def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
     """Process a single file and return structured result"""
     logger.info(f"Processing single file: {filename}")
@@ -369,13 +384,13 @@ def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
         
         # Extract JSON from result
         content_json = extract_json_from_content(result)
-        
         # Normalize total_work_experience
         if "total_work_experience" in content_json:
             experience_value = str(content_json["total_work_experience"]).strip()
             if experience_value and not experience_value.lower().endswith("years"):
                 content_json["total_work_experience"] = f"{experience_value} years"
-        
+        # Normalize keys
+        content_json = normalize_keys(content_json)
         return {
             "filename": filename,
             "status": "success",
