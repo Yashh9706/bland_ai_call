@@ -3,22 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nursefast.ai - Nursing Career Opportunities</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>Nursefast.ai - Upload Resume</title>
     <style>
-        :root {
-            /* Nurse color palette */
-            --nurse-50: #e6f6ff;
-            --nurse-100: #cceeff;
-            --nurse-600: #0081cc;
-            --white: #ffffff;
-            --gray-50: #f9fafb;
-            --green-50: #f0fdf4;
-            --red-50: #fef2f2;
-            --orange-red: #ff3f00;
-        }
-
         * {
             margin: 0;
             padding: 0;
@@ -26,613 +12,473 @@
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            /* Hero section gradient background */
-            background: linear-gradient(135deg, var(--nurse-50) 0%, var(--white) 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             padding: 20px;
-            position: relative;
-            overflow-x: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        body::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(0,129,204,0.05)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
-            pointer-events: none;
-        }
-
-        .form-container {
-            /* White background like NurseHowItWorksSection */
-            background: var(--white);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(0, 129, 204, 0.1);
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 25px 50px rgba(0, 129, 204, 0.15);
-            width: 100%;
+        .container {
             max-width: 500px;
-            position: relative;
-            animation: slideUp 0.8s ease-out;
-        }
-
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .brand-header {
-            text-align: center;
-            margin-bottom: 35px;
-            /* Light blue background like NurseInterestForm */
-            background: var(--nurse-50);
-            padding: 20px;
-            border-radius: 16px;
-            margin: -20px -20px 35px -20px;
-        }
-
-        .brand-logo {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 10px;
-        }
-
-        .brand-icon {
-            width: 50px;
-            height: 50px;
-            /* Icon container background */
-            background: var(--nurse-100);
+            width: 100%;
+            background: white;
             border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(90deg, #2196F3 0%, #FF5722 100%);
+            height: 4px;
+        }
+
+        .content {
+            padding: 50px 40px;
+        }
+
+        .logo-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--nurse-600);
-            font-size: 24px;
-            box-shadow: 0 8px 20px rgba(0, 129, 204, 0.2);
+            gap: 8px;
+            margin-bottom: 8px;
         }
 
-        .brand-name {
-            font-size: 32px;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--nurse-600) 0%, var(--orange-red) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .logo-icon {
+            width: 24px;
+            height: 24px;
+            background: #2196F3;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
         }
 
-        .brand-tagline {
+        .logo-text {
+            font-size: 28px;
+            font-weight: 600;
+            color: #2196F3;
+        }
+
+        .tagline {
             color: #666;
             font-size: 14px;
-            font-weight: 400;
-            margin-top: 5px;
         }
 
         .form-title {
-            color: #333;
             font-size: 24px;
             font-weight: 600;
-            margin-bottom: 8px;
+            color: #333;
+            margin-bottom: 12px;
+            text-align: center;
         }
 
         .form-subtitle {
             color: #666;
             font-size: 16px;
-            font-weight: 400;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
+            line-height: 1.5;
+            text-align: center;
         }
 
         .form-group {
-            margin-bottom: 24px;
-            position: relative;
+            margin-bottom: 30px;
         }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-            font-size: 14px;
+        .form-label {
             display: flex;
             align-items: center;
-            gap: 6px;
-        }
-
-        .label-icon {
-            color: var(--orange-red);
-            font-size: 14px;
-        }
-
-        input[type="text"],
-        input[type="number"],
-        textarea,
-        select {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #e1e8ed;
-            border-radius: 12px;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            color: #333;
             font-size: 16px;
-            font-family: 'Inter', sans-serif;
-            transition: all 0.3s ease;
-            /* Light gray background like comparison section */
-            background-color: var(--gray-50);
+            justify-content: center;
+        }
+
+        .required {
+            color: #FF5722;
+        }
+
+        .file-upload {
             position: relative;
+            display: block;
+            width: 100%;
+            padding: 40px 20px;
+            border: 3px dashed #ddd;
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
         }
 
-        input[type="text"]:focus,
-        input[type="number"]:focus,
-        textarea:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--nurse-600);
-            background-color: var(--white);
-            box-shadow: 0 0 0 4px rgba(0, 129, 204, 0.1);
-            transform: translateY(-1px);
+        .file-upload:hover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+            transform: translateY(-2px);
         }
 
-        textarea {
-            resize: vertical;
-            min-height: 100px;
+        .file-upload.dragover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+            transform: scale(1.02);
         }
 
-        .phone-group {
+        .file-upload input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            border-radius: 50%;
             display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 28px;
+        }
+
+        .upload-text {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .upload-subtext {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .file-formats {
+            display: flex;
+            justify-content: center;
             gap: 12px;
+            margin-top: 16px;
         }
 
-        .country-select {
-            width: 130px;
-            flex-shrink: 0;
+        .format-badge {
+            background: #e3f2fd;
+            color: #2196F3;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
         }
 
-        .phone-input {
-            flex: 1;
+        .file-info {
+            margin-top: 20px;
+            padding: 16px;
+            background: linear-gradient(135deg, #e8f5e8, #d4edda);
+            border-radius: 8px;
+            color: #2e7d2e;
+            font-size: 14px;
+            display: none;
+            border-left: 4px solid #28a745;
+        }
+
+        .file-info-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .submit-btn {
             width: 100%;
-            /* Final CTA section gradient */
-            background: linear-gradient(135deg, var(--nurse-600) 0%, var(--orange-red) 100%);
-            color: var(--white);
             padding: 16px;
+            background: linear-gradient(90deg, #2196F3 0%, #FF5722 100%);
+            color: white;
             border: none;
-            border-radius: 12px;
-            font-size: 16px;
+            border-radius: 10px;
+            font-size: 18px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-family: 'Inter', sans-serif;
+            margin-top: 20px;
         }
 
-        .submit-btn:hover:not(:disabled) {
-            background: linear-gradient(135deg, #006199 0%, #cc3200 100%);
+        .submit-btn:hover {
+            opacity: 0.9;
             transform: translateY(-2px);
-            box-shadow: 0 15px 35px rgba(0, 129, 204, 0.4);
-        }
-
-        .submit-btn:active {
-            transform: translateY(0);
+            box-shadow: 0 6px 20px rgba(33, 150, 243, 0.3);
         }
 
         .submit-btn:disabled {
-            opacity: 0.7;
+            opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
 
-        .btn-text {
-            transition: opacity 0.3s ease;
-        }
-
-        .btn-text.hidden {
+        #loader-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(255,255,255,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
             opacity: 0;
+            transition: opacity 0.3s;
         }
-
-        .loader {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top: 2px solid var(--white);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .loader.visible {
+        #loader-overlay.active {
+            display: flex !important;
             opacity: 1;
+            animation: fadeIn 0.3s;
         }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
-
-        .required {
-            color: var(--orange-red);
-        }
-
-        .success-message {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            /* Form success state background */
-            background: var(--green-50);
-            color: #065f46;
-            border: 1px solid #10b981;
-            padding: 16px 24px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(5, 150, 105, 0.2);
-            transform: translateX(400px);
-            transition: transform 0.4s ease;
-            z-index: 1000;
+        .loader-content {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 10px;
+            background: rgba(255,255,255,0.95);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px #2196f340;
+            padding: 48px 36px 36px 36px;
+            min-width: 320px;
+            animation: popIn 0.4s cubic-bezier(.68,-0.55,.27,1.55);
         }
-
-        .success-message.show {
-            transform: translateX(0);
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
         }
-
-        .error-message {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            /* Semi-transparent light red like comparison cards */
-            background: var(--red-50);
-            color: #991b1b;
-            border: 1px solid var(--orange-red);
-            padding: 16px 24px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(255, 63, 0, 0.2);
-            transform: translateX(400px);
-            transition: transform 0.4s ease;
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .modern-spinner {
+            margin-bottom: 24px;
         }
-
-        .error-message.show {
-            transform: translateX(0);
+        .modern-spinner svg {
+            display: block;
         }
-
-        .form-progress {
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 4px;
-            background: linear-gradient(135deg, var(--nurse-600) 0%, var(--orange-red) 100%);
-            border-radius: 20px 20px 0 0;
-            width: 0%;
-            transition: width 0.3s ease;
+        .modern-spinner .bg {
+            stroke: #e3e3e3;
         }
-
-        .floating-elements {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            overflow: hidden;
+        .modern-spinner .fg {
+            stroke-dasharray: 175;
+            stroke-dashoffset: 0;
+            stroke: url(#spinner-gradient);
+            animation: spin-stroke 1.2s linear infinite;
         }
-
-        .floating-element {
-            position: absolute;
-            color: rgba(0, 129, 204, 0.1);
-            font-size: 20px;
-            animation: float 6s ease-in-out infinite;
+        .modern-spinner svg circle.fg {
+            stroke: #2196F3;
+            filter: drop-shadow(0 0 8px #2196f3aa);
         }
-
-        .floating-element:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
-        .floating-element:nth-child(2) { top: 20%; right: 10%; animation-delay: 1s; }
-        .floating-element:nth-child(3) { bottom: 30%; left: 15%; animation-delay: 2s; }
-        .floating-element:nth-child(4) { bottom: 20%; right: 15%; animation-delay: 3s; }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(5deg); }
+        @keyframes spin-stroke {
+            0% { stroke-dashoffset: 175; }
+            100% { stroke-dashoffset: 0; }
         }
-
-        .help-text {
+        .loader-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1976D2;
+            margin-bottom: 8px;
+            letter-spacing: 0.01em;
+            font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .loader-sub {
             color: #666;
-            font-size: 12px;
-            margin-top: 6px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
+            font-size: 1rem;
+            margin-bottom: 0;
+            text-align: center;
         }
 
-        /* Comparison card styles using the palette */
-        .comparison-card {
-            background: var(--nurse-50);
-            border: 1px solid rgba(0, 129, 204, 0.2);
-            border-radius: 12px;
-            padding: 16px;
-            margin: 10px 0;
-        }
-
-        .comparison-card.highlight {
-            background: rgba(0, 129, 204, 0.05);
-            border-color: var(--nurse-600);
-        }
-
-        @media (max-width: 480px) {
-            .form-container {
-                padding: 30px 20px;
+        @media (max-width: 600px) {
+            .content {
+                padding: 40px 20px;
+            }
+            
+            .container {
                 margin: 10px;
             }
-            
-            .brand-header {
-                margin: -15px -15px 35px -15px;
-                padding: 15px;
+
+            .upload-icon {
+                width: 56px;
+                height: 56px;
+                font-size: 24px;
             }
-            
-            .brand-name {
-                font-size: 28px;
+
+            .upload-text {
+                font-size: 16px;
             }
-            
+
             .form-title {
                 font-size: 20px;
-            }
-
-            .phone-group {
-                flex-direction: column;
-                gap: 12px;
-            }
-
-            .country-select {
-                width: 100%;
             }
         }
     </style>
 </head>
 <body>
-    <div class="floating-elements">
-        <i class="fas fa-heartbeat floating-element"></i>
-        <i class="fas fa-stethoscope floating-element"></i>
-        <i class="fas fa-user-nurse floating-element"></i>
-        <i class="fas fa-hospital floating-element"></i>
-    </div>
-
-    <div class="form-container">
-        <div class="form-progress" id="formProgress"></div>
-        
-        <div class="brand-header">
-            <div class="brand-logo">
-                <div class="brand-icon">
-                    <i class="fas fa-user-nurse"></i>
+    <div class="container">
+        <div class="header"></div>
+        <div class="content">
+            <div class="logo-section">
+                <div class="logo">
+                    <div class="logo-icon">👩‍⚕️</div>
+                    <div class="logo-text">Nursefast.ai</div>
                 </div>
-                <div class="brand-name">Nursefast.ai</div>
+                <div class="tagline">Connecting Healthcare Professionals Worldwide</div>
             </div>
-            <div class="brand-tagline">Connecting Healthcare Professionals Worldwide</div>
+
+            <form id="resumeForm" enctype="multipart/form-data">
+                <div class="form-title">Upload Your Resume</div>
+                <div class="form-subtitle">Share your resume to get connected with exciting nursing opportunities instantly</div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        📄 Resume <span class="required">*</span>
+                    </label>
+                    <label for="resume-upload" class="file-upload" id="file-upload-area">
+                        <input type="file" id="resume-upload" accept=".pdf,.docx" required>
+                        <div class="upload-icon">📎</div>
+                        <div class="upload-text">Click to upload or drag and drop</div>
+                        <div class="upload-subtext">Maximum file size: 10MB</div>
+                        <div class="file-formats">
+                            <span class="format-badge">PDF</span>
+                            <span class="format-badge">DOCX</span>
+                        </div>
+                    </label>
+                    <div class="file-info" id="file-info">
+                        <div class="file-info-content">
+                            <span>✅</span>
+                            <span id="file-details"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn">Submit Resume</button>
+            </form>
+            <div id="result"></div>
         </div>
-
-        <div class="form-title">Join Our Nursing Network</div>
-        <div class="form-subtitle">Apply for exciting nursing opportunities and get connected instantly</div>
-        
-        <form id="jobForm" action="http://localhost:8000/submit-job-application" method="POST">
-            <div class="form-group">
-                <label for="job_title">
-                    <i class="fas fa-briefcase label-icon"></i>
-                    Nursing Position <span class="required">*</span>
-                </label>
-                <input type="text" id="job_title" name="job_title" required placeholder="e.g., Registered Nurse, ICU Nurse, Pediatric Nurse">
-            </div>
-
-            <div class="form-group">
-                <label for="pay">
-                    <i class="fas fa-dollar-sign label-icon"></i>
-                    Expected Salary <span class="required">*</span>
-                </label>
-                <input type="text" id="pay" name="pay" required placeholder="e.g., $75,000 annual or $35/hour">
-                <div class="help-text">
-                    <i class="fas fa-info-circle"></i>
-                    Include your expected annual salary or hourly rate
+        <div id="loader-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(255,255,255,0.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;transition:opacity 0.3s;">
+            <div class="loader-content">
+                <div class="modern-spinner">
+                    <svg width="70" height="70" viewBox="0 0 70 70">
+                        <circle class="bg" cx="35" cy="35" r="28" fill="none" stroke="#e3e3e3" stroke-width="8"/>
+                        <circle class="fg" cx="35" cy="35" r="28" fill="none" stroke="#2196F3" stroke-width="8" stroke-linecap="round"/>
+                    </svg>
                 </div>
+                <div class="loader-title">Processing your resume...</div>
+                <div class="loader-sub">This may take a few seconds. Please wait.</div>
             </div>
-
-            <div class="form-group">
-                <label for="location">
-                    <i class="fas fa-map-marker-alt label-icon"></i>
-                    Preferred Location <span class="required">*</span>
-                </label>
-                <input type="text" id="location" name="location" required placeholder="e.g., New York, NY or Remote">
-            </div>
-
-            <div class="form-group">
-                <label for="work_experience">
-                    <i class="fas fa-clock label-icon"></i>
-                    Healthcare Experience <span class="required">*</span>
-                </label>
-                <input type="text" id="work_experience" name="work_experience" required placeholder="e.g., 3 years, 2.5 years, New Graduate">
-                <div class="help-text">
-                    <i class="fas fa-info-circle"></i>
-                    Include your total nursing or healthcare experience
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="phone_number">
-                    <i class="fas fa-phone label-icon"></i>
-                    Phone Number <span class="required">*</span>
-                </label>
-                <div class="phone-group">
-                    <select id="country_code" name="country_code" required class="country-select">
-                        <option value="+1">🇺🇸 +1</option>
-                        <option value="+91">🇮🇳 +91</option>
-                        <option value="+44">🇬🇧 +44</option>
-                        <option value="+86">🇨🇳 +86</option>
-                        <option value="+81">🇯🇵 +81</option>
-                        <option value="+49">🇩🇪 +49</option>
-                        <option value="+33">🇫🇷 +33</option>
-                        <option value="+39">🇮🇹 +39</option>
-                        <option value="+7">🇷🇺 +7</option>
-                        <option value="+55">🇧🇷 +55</option>
-                        <option value="+61">🇦🇺 +61</option>
-                        <option value="+34">🇪🇸 +34</option>
-                        <option value="+31">🇳🇱 +31</option>
-                        <option value="+46">🇸🇪 +46</option>
-                        <option value="+41">🇨🇭 +41</option>
-                        <option value="+82">🇰🇷 +82</option>
-                        <option value="+65">🇸🇬 +65</option>
-                        <option value="+60">🇲🇾 +60</option>
-                        <option value="+66">🇹🇭 +66</option>
-                        <option value="+62">🇮🇩 +62</option>
-                        <option value="+63">🇵🇭 +63</option>
-                        <option value="+84">🇻🇳 +84</option>
-                        <option value="+234">🇳🇬 +234</option>
-                        <option value="+27">🇿🇦 +27</option>
-                        <option value="+20">🇪🇬 +20</option>
-                        <option value="+52">🇲🇽 +52</option>
-                        <option value="+54">🇦🇷 +54</option>
-                        <option value="+56">🇨🇱 +56</option>
-                        <option value="+57">🇨🇴 +57</option>
-                        <option value="+51">🇵🇪 +51</option>
-                    </select>
-                    <input type="text" id="phone_number_input" name="phone_number_input" required placeholder="9851934567" pattern="[0-9]{6,15}" class="phone-input">
-                </div>
-                <div class="help-text">
-                    <i class="fas fa-shield-alt"></i>
-                    We'll call you to discuss opportunities
-                </div>
-            </div>
-
-            <button type="submit" class="submit-btn" id="submitBtn">
-                <span class="btn-text" id="btnText">
-                    <i class="fas fa-paper-plane"></i>
-                    Submit Application & Start Call
-                </span>
-                <div class="loader" id="loader"></div>
-            </button>
-        </form>
+        </div>
     </div>
 
     <script>
-        // Form progress tracking
-        const formInputs = document.querySelectorAll('input[required], select[required]');
-        const progressBar = document.getElementById('formProgress');
-        
-        function updateProgress() {
-            let filledInputs = 0;
-            formInputs.forEach(input => {
-                if (input.value.trim() !== '') {
-                    filledInputs++;
-                }
-            });
-            const progress = (filledInputs / formInputs.length) * 100;
-            progressBar.style.width = progress + '%';
-        }
+        // File upload functionality
+        const fileInput = document.getElementById('resume-upload');
+        const fileUploadArea = document.getElementById('file-upload-area');
+        const fileInfo = document.getElementById('file-info');
+        const fileDetails = document.getElementById('file-details');
 
-        formInputs.forEach(input => {
-            input.addEventListener('input', updateProgress);
-            input.addEventListener('change', updateProgress);
-        });
+        // Handle file selection
+        fileInput.addEventListener('change', handleFileSelect);
 
-        function showMessage(message, type = 'success') {
-            // Remove existing messages
-            document.querySelectorAll('.success-message, .error-message').forEach(msg => msg.remove());
-            
-            const messageDiv = document.createElement('div');
-            messageDiv.className = type === 'success' ? 'success-message' : 'error-message';
-            messageDiv.innerHTML = `
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
-                ${message}
-            `;
-            document.body.appendChild(messageDiv);
-            
-            setTimeout(() => messageDiv.classList.add('show'), 100);
-            setTimeout(() => {
-                messageDiv.classList.remove('show');
-                setTimeout(() => messageDiv.remove(), 400);
-            }, 4000);
-        }
+        // Handle drag and drop
+        fileUploadArea.addEventListener('dragover', handleDragOver);
+        fileUploadArea.addEventListener('dragleave', handleDragLeave);
+        fileUploadArea.addEventListener('drop', handleDrop);
 
-        document.getElementById('jobForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('submitBtn');
-            const btnText = document.getElementById('btnText');
-            const loader = document.getElementById('loader');
-            
-            // Show loading state
-            submitBtn.disabled = true;
-            btnText.classList.add('hidden');
-            loader.classList.add('visible');
-            
-            const formData = new FormData(this);
-            const data = Object.fromEntries(formData);
-            
-            // Combine country code with phone number
-            const countryCode = data.country_code;
-            const phoneNumberInput = data.phone_number_input;
-            data.phone_number = countryCode + phoneNumberInput;
-            
-            // Remove the separate fields since we now have the combined phone_number
-            delete data.country_code;
-            delete data.phone_number_input;
-            
-            try {
-                const response = await fetch('http://localhost:8000/submit-job-application', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    showMessage('🎉 Application submitted successfully! Our team will call you shortly to discuss exciting nursing opportunities.', 'success');
-                    this.reset();
-                    updateProgress();
-                } else {
-                    const error = await response.json();
-                    showMessage('❌ ' + (error.detail || 'Submission failed. Please try again.'), 'error');
-                }
-            } catch (error) {
-                showMessage('❌ Network error: ' + error.message, 'error');
-            } finally {
-                // Reset button state
-                setTimeout(() => {
-                    submitBtn.disabled = false;
-                    btnText.classList.remove('hidden');
-                    loader.classList.remove('visible');
-                }, 1000);
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                displayFileInfo(file);
             }
-        });
+        }
 
-        // Add some interactive animations
-        document.querySelectorAll('input, select, textarea').forEach(input => {
-            input.addEventListener('focus', function() {
-                this.parentElement.style.transform = 'scale(1.02)';
-            });
+        function handleDragOver(e) {
+            e.preventDefault();
+            fileUploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
             
-            input.addEventListener('blur', function() {
-                this.parentElement.style.transform = 'scale(1)';
-            });
+            const file = e.dataTransfer.files[0];
+            if (file && isValidFile(file)) {
+                fileInput.files = e.dataTransfer.files;
+                displayFileInfo(file);
+            } else {
+                showError('Please upload a PDF or DOCX file only (max 10MB).');
+            }
+        }
+
+        function isValidFile(file) {
+            const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            
+            return allowedTypes.includes(file.type) && file.size <= maxSize;
+        }
+
+        function displayFileInfo(file) {
+            if (!isValidFile(file)) {
+                showError('Please upload a PDF or DOCX file under 10MB.');
+                return;
+            }
+
+            const fileSize = (file.size / 1024 / 1024).toFixed(2);
+            const fileType = file.type.includes('pdf') ? 'PDF' : 'DOCX';
+            
+            fileDetails.textContent = `${file.name} (${fileSize} MB, ${fileType}) - Ready to submit`;
+            fileInfo.style.display = 'block';
+        }
+
+        function showError(message) {
+            alert(message);
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+        }
+
+        // Form submission
+        document.getElementById('resumeForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('resume-upload');
+            if (!fileInput.files.length) {
+                alert('Please select a file.');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            const loader = document.getElementById('loader-overlay');
+            loader.classList.add('active');
+            loader.style.display = 'flex';
+            try {
+                const response = await fetch('http://localhost:8000/process-resume/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                sessionStorage.setItem('resumeResult', JSON.stringify(result));
+                window.location.href = 'result.html';
+            } catch (err) {
+                alert('Error: ' + err);
+            } finally {
+                loader.classList.remove('active');
+                loader.style.display = 'none';
+            }
         });
     </script>
 </body>
