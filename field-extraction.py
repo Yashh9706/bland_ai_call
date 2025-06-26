@@ -53,9 +53,9 @@ logger.info("System prompt loaded from config")
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="PDF Processing API",
+    title="Document Processing API",
     description="API to process PDFs and DOCX files using LLM - supports single and multiple files",
-    version="1.0.0"
+    version="2.0.0"
 )
 logger.info("FastAPI application initialized")
 
@@ -77,12 +77,6 @@ app.add_middleware(
 )
 
 # Response models
-class ProcessResponse(BaseModel):
-    unique_id: str
-    status: str
-    content: Dict[str, Any]
-    error: Optional[str] = None
-
 class MultiProcessResponse(BaseModel):
     status: str
     results: List[Dict[str, Any]]
@@ -407,63 +401,21 @@ def process_single_file(file_path: str, filename: str) -> Dict[str, Any]:
             "error": str(e)
         }
 
-# SINGLE FILE PROCESSING ENDPOINTS
-@app.post("/process-file/")
-async def process_single_file_endpoint(
-    file: UploadFile = File(...)
-):
-    """Process a single PDF or DOCX file"""
-    logger.info(f"Received single file request: {file.filename}")
-
-    # Validate file type
-    if not file.filename.lower().endswith(('.pdf', '.docx')):
-        logger.warning(f"Invalid file type: {file.filename}")
-        raise HTTPException(status_code=400, detail="File must be a PDF or DOCX")
-
-    temp_path = None
-    try:
-        # Create temporary file
-        suffix = '.pdf' if file.filename.lower().endswith('.pdf') else '.docx'
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            shutil.copyfileobj(file.file, temp_file)
-            temp_path = temp_file.name
-
-        logger.info(f"File saved to temporary path: {temp_path}")
-
-        # Process the file
-        result = process_single_file(temp_path, file.filename)
-
-        # Save to PostgreSQL if successful
-        # if result["status"] == "success":
-        #     upsert_to_postgres(result["content"])
-
-        logger.info(f"Single file processing completed: {file.filename}")
-        return JSONResponse(content=result)
-
-    except Exception as e:
-        logger.exception(f"Unhandled exception in single file processing: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "filename": file.filename,
-                "status": "error",
-                "content": {},
-                "error": str(e)
-            }
-        )
-    finally:
-        # Clean up temporary file
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
-            logger.info("Temporary file cleaned up")
-
-# MULTIPLE FILES PROCESSING ENDPOINTS
+# MAIN ENDPOINT - HANDLES SINGLE OR MULTIPLE FILES
 @app.post("/process-multiple-files/", response_model=MultiProcessResponse)
 async def process_multiple_files_endpoint(
     files: List[UploadFile] = File(...)
 ):
-    """Process multiple PDF and DOCX files"""
-    logger.info(f"Received multiple files request: {len(files)} files")
+    """
+    Process single or multiple PDF and DOCX files
+    
+    This endpoint can handle:
+    - Single file: Upload 1 file
+    - Multiple files: Upload up to 10 files at once
+    
+    Supported formats: PDF, DOCX
+    """
+    logger.info(f"Received files request: {len(files)} files")
 
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -511,7 +463,7 @@ async def process_multiple_files_endpoint(
 
                 if result["status"] == "success":
                     successful_files += 1
-                    # Save to PostgreSQL if successful
+                    # Uncomment to save to PostgreSQL if needed
                     # upsert_to_postgres(result["content"])
                 else:
                     failed_files += 1
@@ -542,11 +494,11 @@ async def process_multiple_files_endpoint(
             "errors": errors
         }
 
-        logger.info(f"Multiple files processing completed. Success: {successful_files}, Failed: {failed_files}")
+        logger.info(f"Files processing completed. Success: {successful_files}, Failed: {failed_files}")
         return JSONResponse(content=response)
 
     except Exception as e:
-        logger.exception(f"Unhandled exception in multiple files processing: {str(e)}")
+        logger.exception(f"Unhandled exception in files processing: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
@@ -568,47 +520,19 @@ async def process_multiple_files_endpoint(
                     logger.warning(f"Failed to delete temporary file {temp_path}: {e}")
         logger.info("All temporary files cleaned up")
 
-# BACKWARD COMPATIBILITY ENDPOINTS
-@app.post("/process-resume/", response_model=ProcessResponse)
-async def process_resume_endpoint(
-    file: UploadFile = File(...)
-):
-    """Legacy endpoint for single resume processing - maintained for backward compatibility"""
-    logger.info(f"Resume processing request received (legacy endpoint)")
-    result = await process_single_file_endpoint(file=file)
-
-    # Convert to legacy format
-    if isinstance(result, JSONResponse):
-        content = result.body.decode() if hasattr(result, 'body') else '{}'
-        try:
-            parsed_content = json.loads(content)
-        except:
-            parsed_content = {"error": "Failed to parse response"}
-    else:
-        parsed_content = result
-
-    # Convert to ProcessResponse format
-    legacy_response = {
-        "unique_id": f"resume_{int(time.time())}",
-        "status": parsed_content.get("status", "error"),
-        "content": parsed_content.get("content", {}),
-        "error": parsed_content.get("error")
-    }
-
-    return JSONResponse(content=legacy_response)
-
 # ROOT ENDPOINT
 @app.get("/")
 async def root():
     return {
-        "message": "PDF and DOCX Processing API is running",
-        "endpoints": {
-            "single_file": "/process-file/ - Process a single PDF or DOCX file",
-            "multiple_files": "/process-multiple-files/ - Process multiple PDF and DOCX files",
-            "legacy_resume": "/process-resume/ - Legacy endpoint for single resume processing"
-        },
+        "message": "Document Processing API is running",
+        "version": "2.0.0",
+        "endpoint": "/process-multiple-files/ - Process single or multiple PDF/DOCX files",
         "supported_formats": ["PDF", "DOCX"],
-        "max_files_per_request": 10
+        "max_files_per_request": 10,
+        "usage": {
+            "single_file": "Upload 1 file to process a single document",
+            "multiple_files": "Upload 2-10 files to process multiple documents at once"
+        }
     }
 
 # REQUEST LOGGING MIDDLEWARE
@@ -630,7 +554,7 @@ async def log_requests(request, call_next):
 # LOG ROTATION FUNCTIONS
 def get_log_handler():
     current_date = datetime.now().strftime("%Y-%m-%d")
-    log_filename = f"{logs_dir}/resume_processor_{current_date}.log"
+    log_filename = f"{logs_dir}/document_processor_{current_date}.log"
 
     # Remove existing FileHandlers
     for handler in logger.handlers[:]:
@@ -648,7 +572,7 @@ def get_log_handler():
 async def check_log_rotation(request, call_next):
     # Get current date and check if log file needs to be rotated
     current_date = datetime.now().strftime("%Y-%m-%d")
-    log_filename = f"{logs_dir}/resume_processor_{current_date}.log"
+    log_filename = f"{logs_dir}/document_processor_{current_date}.log"
 
     # If log file doesn't exist for current date, rotate logs
     if not os.path.exists(log_filename):
@@ -659,5 +583,5 @@ async def check_log_rotation(request, call_next):
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting FastAPI server with multi-file support")
+    logger.info("Starting FastAPI server with single multi-file endpoint")
     uvicorn.run(app, host="0.0.0.0", port=8000)
